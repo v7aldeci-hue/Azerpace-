@@ -18,12 +18,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.7
+          cache-disabled: true
 
       - name: Generate ExoPlayer Bridge Android Project
         run: |
           mkdir -p app/src/main/java/com/sync/webapp
           mkdir -p app/src/main/assets
           cp index.html app/src/main/assets/index.html
+
+          cat << 'EOF' > gradle.properties
+          android.useAndroidX=true
+          android.enableJetifier=true
+          EOF
 
           cat << 'EOF' > settings.gradle
           pluginManagement {
@@ -72,7 +78,6 @@ jobs:
               }
               kotlinOptions {
                   jvmTarget = '17'
-                  freeCompilerArgs += ['-opt-in=androidx.media3.common.util.UnstableApi']
               }
           }
           dependencies {
@@ -315,7 +320,7 @@ jobs:
                                   enableAudioTrackPlaybackParams: Boolean
                               ): AudioSink {
                                   return DefaultAudioSink.Builder(context)
-                                      .setAudioProcessors(arrayOf(tapProcessor))
+                                      .setAudioProcessors(arrayOf<AudioProcessor>(tapProcessor))
                                       .build()
                               }
                           }
