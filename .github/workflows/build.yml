@@ -107,6 +107,9 @@ jobs:
           import android.graphics.Color
           import android.os.Bundle
           import android.webkit.*
+          import java.io.ByteArrayInputStream
+          import java.net.HttpURLConnection
+          import java.net.URL
 
           class MainActivity : Activity() {
               private lateinit var webView: WebView
@@ -131,7 +134,43 @@ jobs:
                       settings.allowUniversalAccessFromFileURLs = true
                       settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
-                      webViewClient = WebViewClient()
+                      webViewClient = object : WebViewClient() {
+                          override fun shouldInterceptRequest(
+                              view: WebView?,
+                              request: WebResourceRequest?
+                          ): WebResourceResponse? {
+                              val urlStr = request?.url?.toString() ?: return super.shouldInterceptRequest(view, request)
+                              if (urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
+                                  try {
+                                      val headers = HashMap<String, String>()
+                                      headers["Access-Control-Allow-Origin"] = "*"
+                                      headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+                                      headers["Access-Control-Allow-Headers"] = "*"
+
+                                      if (request.method.equals("OPTIONS", ignoreCase = true)) {
+                                          return WebResourceResponse("text/plain", "UTF-8", 200, "OK", headers, ByteArrayInputStream(ByteArray(0)))
+                                      }
+
+                                      val conn = URL(urlStr).openConnection() as HttpURLConnection
+                                      conn.requestMethod = request.method
+                                      conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                                      conn.instanceFollowRedirects = true
+                                      conn.connectTimeout = 10000
+                                      conn.readTimeout = 15000
+                                      conn.connect()
+
+                                      val rawType = conn.contentType ?: "audio/mpeg"
+                                      val mime = rawType.split(";")[0].trim()
+                                      val status = if (conn.responseCode in 200..299) conn.responseCode else 200
+                                      return WebResourceResponse(mime, null, status, "OK", headers, conn.inputStream)
+                                  } catch (e: Exception) {
+                                      return super.shouldInterceptRequest(view, request)
+                                  }
+                              }
+                              return super.shouldInterceptRequest(view, request)
+                          }
+                      }
+
                       webChromeClient = object : WebChromeClient() {
                           override fun onPermissionRequest(request: PermissionRequest) {
                               runOnUiThread {
