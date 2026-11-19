@@ -107,14 +107,15 @@ jobs:
           import android.graphics.Color
           import android.os.Bundle
           import android.webkit.*
-          import java.io.ByteArrayInputStream
-          import java.net.HttpURLConnection
-          import java.net.URL
+          import java.io.*
+          import java.net.*
 
           class MainActivity : Activity() {
               private lateinit var webView: WebView
+              private var serverSocket: ServerSocket? = null
+              @Volatile private var running = true
+              private val port = 8765
 
-              @Suppress("DEPRECATION")
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
                   window.statusBarColor = Color.parseColor("#0B1120")
@@ -123,78 +124,117 @@ jobs:
                       requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 101)
                   }
 
+                  startLocalServer()
+
                   webView = WebView(this).apply {
                       setBackgroundColor(Color.parseColor("#0B1120"))
                       settings.javaScriptEnabled = true
                       settings.domStorageEnabled = true
                       settings.mediaPlaybackRequiresUserGesture = false
-                      settings.allowFileAccess = true
-                      settings.allowContentAccess = true
-                      settings.allowFileAccessFromFileURLs = true
-                      settings.allowUniversalAccessFromFileURLs = true
                       settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
-                      webViewClient = object : WebViewClient() {
-                          override fun shouldInterceptRequest(
-                              view: WebView?,
-                              request: WebResourceRequest?
-                          ): WebResourceResponse? {
-                              val urlStr = request?.url?.toString() ?: return super.shouldInterceptRequest(view, request)
-                              if (urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
-                                  try {
-                                      val headers = HashMap<String, String>()
-                                      headers["Access-Control-Allow-Origin"] = "*"
-                                      headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-                                      headers["Access-Control-Allow-Headers"] = "*"
-
-                                      if (request.method.equals("OPTIONS", ignoreCase = true)) {
-                                          return WebResourceResponse("text/plain", "UTF-8", 200, "OK", headers, ByteArrayInputStream(ByteArray(0)))
-                                      }
-
-                                      val conn = URL(urlStr).openConnection() as HttpURLConnection
-                                      conn.requestMethod = request.method
-                                      conn.setRequestProperty("User-Agent", "Mozilla/5.0")
-                                      conn.instanceFollowRedirects = true
-                                      conn.connectTimeout = 10000
-                                      conn.readTimeout = 15000
-                                      conn.connect()
-
-                                      val rawType = conn.contentType ?: "audio/mpeg"
-                                      val mime = rawType.split(";")[0].trim()
-                                      val status = if (conn.responseCode in 200..299) conn.responseCode else 200
-                                      return WebResourceResponse(mime, null, status, "OK", headers, conn.inputStream)
-                                  } catch (e: Exception) {
-                                      return super.shouldInterceptRequest(view, request)
-                                  }
-                              }
-                              return super.shouldInterceptRequest(view, request)
-                          }
-                      }
-
+                      webViewClient = WebViewClient()
                       webChromeClient = object : WebChromeClient() {
                           override fun onPermissionRequest(request: PermissionRequest) {
-                              runOnUiThread {
-                                  request.grant(request.resources)
-                              }
+                              runOnUiThread { request.grant(request.resources) }
                           }
                       }
                   }
 
                   setContentView(webView)
-                  webView.loadUrl("file:///android_asset/index.html")
+                  webView.loadUrl("http://127.0.0.1:$port/")
               }
 
-              override fun onBackPressed() {
-                  if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
+              private fun startLocalServer() {
+                  Thread {
+                      try {
+                          serverSocket = ServerSocket(port, 50, InetAddress.getByName("127.0.0.1"))
+                          while (running) {
+                              val client = serverSocket?.accept() ?: break
+                              Thread { handleClient(client) }.start()
+                          }
+                      } catch (_: Exception) {}
+                  }.start()
               }
-          }
-          EOF
 
-      - name: Build Debug APK
-        run: gradle assembleDebug
+              private fun handleClient(client: Socket) {
+                  try {
+                      val reader = BufferedReader(InputStreamReader(client.getInputStream()))
+                      val requestLine = reader.readLine() ?: return
+                      val parts = requestLine.split(" ")
+                      if (parts.size < 2) return
+                      val method = parts[0]
+                      val path = parts[1]
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MySyncApp-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+                      // Consume remaining headers
+                      while (true) {
+                          val line = reader.readLine()
+                          if (line.isNullOrEmpty()) break
+                      }
+
+                      val out = client.getOutputStream()
+
+                      if (method == "OPTIONS") {
+                          val resp = "HTTP/1.1 200 OK\r\n" +
+                              "Access-Control-Allow-Origin: *\r\n" +
+                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
+                              "Access-Control-Allow-Headers: *\r\n" +
+                              "Content-Length: 0\r\n\r\n"
+                          out.write(resp.toByteArray())
+                          out.flush()
+                          return
+                      }
+
+                      if (path.startsWith("/proxy?url=")) {
+                          val encodedUrl = path.substringAfter("/proxy?url=")
+                          val targetUrl = URLDecoder.decode(encodedUrl, "UTF-8")
+                          val conn = URL(targetUrl).openConnection() as HttpURLConnection
+                          conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12)")
+                          conn.setRequestProperty("Accept", "*/*")
+                          conn.instanceFollowRedirects = true
+                          conn.connectTimeout = 10000
+                          conn.readTimeout = 20000
+                          conn.connect()
+
+                          val contentType = conn.contentType ?: "audio/mpeg"
+                          val header = "HTTP/1.1 200 OK\r\n" +
+                              "Content-Type: $contentType\r\n" +
+                              "Access-Control-Allow-Origin: *\r\n" +
+                              "Cache-Control: no-cache\r\n" +
+                              "Connection: close\r\n\r\n"
+                          out.write(header.toByteArray())
+                          out.flush()
+
+                          val input = conn.inputStream
+                          val buf = ByteArray(8192)
+                          while (running) {
+                              val n = input.read(buf)
+                              if (n == -1) break
+                              out.write(buf, 0, n)
+                              out.flush()
+                          }
+                          input.close()
+                          conn.disconnect()
+                      } else {
+                          var html = assets.open("index.html").bufferedReader().use { it.readText() }
+                          val inject = """
+                              <script>
+                              (function(){
+                                const P = "http://127.0.0.1:$port/proxy?url=";
+                                const wrap = (u) => (typeof u === "string" && /^https?:\/\//i.test(u) && !u.startsWith("http://127.0.0.1")) ? P + encodeURIComponent(u) : u;
+                                const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "src");
+                                if (desc && desc.set) {
+                                  Object.defineProperty(HTMLMediaElement.prototype, "src", {
+                                    get: function() { return desc.get.call(this); },
+                                    set: function(v) { desc.set.call(this, wrap(v)); }
+                                  });
+                                }
+                                const origFetch = window.fetch;
+                                window.fetch = function(input, init) {
+                                  if (typeof input === "string") input = wrap(input);
+                                  return origFetch.call(this, input, init);
+                                };
+                              })();
+                              </script>
+                          """.trimIndent()
+                          html = if (html.contains("<head>", ignoreCase = true)) {
