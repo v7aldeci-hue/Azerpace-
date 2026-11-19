@@ -166,7 +166,6 @@ jobs:
                       val method = parts[0]
                       val path = parts[1]
 
-                      // Consume remaining headers
                       while (true) {
                           val line = reader.readLine()
                           if (line.isNullOrEmpty()) break
@@ -175,46 +174,15 @@ jobs:
                       val out = client.getOutputStream()
 
                       if (method == "OPTIONS") {
-                          val resp = "HTTP/1.1 200 OK\r\n" +
-                              "Access-Control-Allow-Origin: *\r\n" +
-                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
-                              "Access-Control-Allow-Headers: *\r\n" +
-                              "Content-Length: 0\r\n\r\n"
+                          val resp = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\nContent-Length: 0\r\n\r\n"
                           out.write(resp.toByteArray())
                           out.flush()
                           return
                       }
 
                       if (path.startsWith("/proxy?url=")) {
-                          val encodedUrl = path.substringAfter("/proxy?url=")
-                          val targetUrl = URLDecoder.decode(encodedUrl, "UTF-8")
-                          val conn = URL(targetUrl).openConnection() as HttpURLConnection
-                          conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 12)")
-                          conn.setRequestProperty("Accept", "*/*")
-                          conn.instanceFollowRedirects = true
-                          conn.connectTimeout = 10000
-                          conn.readTimeout = 20000
-                          conn.connect()
-
-                          val contentType = conn.contentType ?: "audio/mpeg"
-                          val header = "HTTP/1.1 200 OK\r\n" +
-                              "Content-Type: $contentType\r\n" +
-                              "Access-Control-Allow-Origin: *\r\n" +
-                              "Cache-Control: no-cache\r\n" +
-                              "Connection: close\r\n\r\n"
-                          out.write(header.toByteArray())
-                          out.flush()
-
-                          val input = conn.inputStream
-                          val buf = ByteArray(8192)
-                          while (running) {
-                              val n = input.read(buf)
-                              if (n == -1) break
-                              out.write(buf, 0, n)
-                              out.flush()
-                          }
-                          input.close()
-                          conn.disconnect()
+                          val targetUrl = URLDecoder.decode(path.substringAfter("/proxy?url="), "UTF-8")
+                          streamWithRawSocket(targetUrl, out, 0)
                       } else {
                           var html = assets.open("index.html").bufferedReader().use { it.readText() }
                           val inject = """
@@ -222,6 +190,8 @@ jobs:
                               (function(){
                                 const P = "http://127.0.0.1:$port/proxy?url=";
                                 const wrap = (u) => (typeof u === "string" && /^https?:\/\//i.test(u) && !u.startsWith("http://127.0.0.1")) ? P + encodeURIComponent(u) : u;
+                                const OrigAudio = window.Audio;
+                                window.Audio = function(src) { return new OrigAudio(src ? wrap(src) : undefined); };
                                 const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "src");
                                 if (desc && desc.set) {
                                   Object.defineProperty(HTMLMediaElement.prototype, "src", {
@@ -229,6 +199,11 @@ jobs:
                                     set: function(v) { desc.set.call(this, wrap(v)); }
                                   });
                                 }
+                                const origSetAttr = Element.prototype.setAttribute;
+                                Element.prototype.setAttribute = function(k, v) {
+                                  if (k.toLowerCase() === "src" && (this.tagName === "AUDIO" || this.tagName === "SOURCE")) v = wrap(v);
+                                  return origSetAttr.call(this, k, v);
+                                };
                                 const origFetch = window.fetch;
                                 window.fetch = function(input, init) {
                                   if (typeof input === "string") input = wrap(input);
@@ -243,10 +218,7 @@ jobs:
                               inject + "\n" + html
                           }
                           val bytes = html.toByteArray(Charsets.UTF_8)
-                          val header = "HTTP/1.1 200 OK\r\n" +
-                              "Content-Type: text/html; charset=utf-8\r\n" +
-                              "Content-Length: ${bytes.size}\r\n" +
-                              "Connection: close\r\n\r\n"
+                          val header = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
                           out.write(header.toByteArray())
                           out.write(bytes)
                           out.flush()
@@ -254,6 +226,72 @@ jobs:
                   } catch (_: Exception) {
                   } finally {
                       try { client.close() } catch (_: Exception) {}
+                  }
+              }
+
+              private fun streamWithRawSocket(urlStr: String, out: OutputStream, depth: Int) {
+                  if (depth > 3) return
+                  val u = URL(urlStr)
+                  val host = u.host
+                  val targetPort = if (u.port != -1) u.port else if (u.protocol == "https") 443 else 80
+                  val reqPath = (if (u.path.isNullOrEmpty()) "/" else u.path) + (if (u.query != null) "?${u.query}" else "")
+
+                  val remote: Socket = if (u.protocol == "https") {
+                      javax.net.ssl.SSLSocketFactory.getDefault().createSocket(host, targetPort)
+                  } else {
+                      Socket().apply { connect(InetSocketAddress(host, targetPort), 10000) }
+                  }
+                  remote.soTimeout = 20000
+
+                  try {
+                      val req = "GET $reqPath HTTP/1.0\r\nHost: $host:$targetPort\r\nUser-Agent: VLC/3.0.18\r\nIcy-MetaData: 0\r\nAccept: */*\r\nConnection: close\r\n\r\n"
+                      remote.getOutputStream().write(req.toByteArray())
+                      remote.getOutputStream().flush()
+
+                      val inp = BufferedInputStream(remote.getInputStream())
+                      var contentType = "audio/mpeg"
+                      var redirectUrl: String? = null
+                      val lineBuf = ByteArrayOutputStream()
+
+                      // Read headers line by line until empty line
+                      while (true) {
+                          lineBuf.reset()
+                          var prev = -1
+                          while (true) {
+                              val b = inp.read()
+                              if (b == -1) return
+                              if (b == '\n'.code) break
+                              if (b != '\r'.code) lineBuf.write(b)
+                              prev = b
+                          }
+                          val line = lineBuf.toString("UTF-8").trim()
+                          if (line.isEmpty()) break
+                          if (line.startsWith("Content-Type:", ignoreCase = true)) {
+                              contentType = line.substringAfter(":").trim().split(";")[0]
+                          } else if (line.startsWith("Location:", ignoreCase = true)) {
+                              redirectUrl = line.substringAfter(":").trim()
+                          }
+                      }
+
+                      if (redirectUrl != null) {
+                          remote.close()
+                          streamWithRawSocket(redirectUrl, out, depth + 1)
+                          return
+                      }
+
+                      val respHeader = "HTTP/1.1 200 OK\r\nContent-Type: $contentType\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n"
+                      out.write(respHeader.toByteArray())
+                      out.flush()
+
+                      val buf = ByteArray(8192)
+                      while (running) {
+                          val n = inp.read(buf)
+                          if (n == -1) break
+                          out.write(buf, 0, n)
+                          out.flush()
+                      }
+                  } finally {
+                      try { remote.close() } catch (_: Exception) {}
                   }
               }
 
