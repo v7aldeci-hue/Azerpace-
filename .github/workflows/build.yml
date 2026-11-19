@@ -142,7 +142,9 @@ jobs:
           import java.util.concurrent.CountDownLatch
           import java.util.concurrent.LinkedBlockingQueue
           import java.util.concurrent.TimeUnit
+          import java.util.concurrent.atomic.AtomicInteger
           import java.util.concurrent.atomic.AtomicLong
+          import java.util.concurrent.atomic.AtomicReference
 
           class MainActivity : Activity() {
               private lateinit var webView: WebView
@@ -281,15 +283,15 @@ jobs:
 
                   val queue = LinkedBlockingQueue<ByteArray>(200)
                   val formatLatch = CountDownLatch(1)
-                  @Volatile var sampleRate = 44100
-                  @Volatile var channels = 2
-                  @Volatile var errorCode: String? = null
+                  val sampleRate = AtomicInteger(44100)
+                  val channels = AtomicInteger(2)
+                  val errorCode = AtomicReference<String?>(null)
 
                   val tapProcessor = TapAudioProcessor(
                       onFormatReady = { sr, ch ->
                           if (sr > 0 && ch > 0) {
-                              sampleRate = sr
-                              channels = ch
+                              sampleRate.set(sr)
+                              channels.set(ch)
                               formatLatch.countDown()
                           }
                       },
@@ -332,7 +334,7 @@ jobs:
 
                           player.addListener(object : Player.Listener {
                               override fun onPlayerError(error: PlaybackException) {
-                                  errorCode = error.errorCodeName
+                                  errorCode.set(error.errorCodeName)
                                   formatLatch.countDown()
                                   Toast.makeText(this@MainActivity, "خطأ البث: ${error.errorCodeName}", Toast.LENGTH_LONG).show()
                               }
@@ -343,14 +345,14 @@ jobs:
                           player.prepare()
                           player.playWhenReady = true
                       } catch (e: Exception) {
-                          errorCode = e.message ?: "INIT_ERROR"
+                          errorCode.set(e.message ?: "INIT_ERROR")
                           formatLatch.countDown()
                       }
                   }
 
                   try {
                       val ready = formatLatch.await(15, TimeUnit.SECONDS)
-                      if (!ready || errorCode != null || activeSessionId != mySession) {
+                      if (!ready || errorCode.get() != null || activeSessionId != mySession) {
                           val resp = "HTTP/1.1 502 Bad Gateway\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\n\r\n"
                           out.write(resp.toByteArray())
                           out.flush()
@@ -364,7 +366,7 @@ jobs:
                           "Cache-Control: no-store, no-cache\r\n" +
                           "Connection: close\r\n\r\n"
                       out.write(respHeader.toByteArray())
-                      out.write(buildWavHeader(sampleRate, channels))
+                      out.write(buildWavHeader(sampleRate.get(), channels.get()))
                       out.flush()
 
                       var emptyPolls = 0
