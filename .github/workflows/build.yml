@@ -238,3 +238,42 @@ jobs:
                               </script>
                           """.trimIndent()
                           html = if (html.contains("<head>", ignoreCase = true)) {
+                              html.replaceFirst(Regex("<head>", RegexOption.IGNORE_CASE), "<head>\n$inject")
+                          } else {
+                              inject + "\n" + html
+                          }
+                          val bytes = html.toByteArray(Charsets.UTF_8)
+                          val header = "HTTP/1.1 200 OK\r\n" +
+                              "Content-Type: text/html; charset=utf-8\r\n" +
+                              "Content-Length: ${bytes.size}\r\n" +
+                              "Connection: close\r\n\r\n"
+                          out.write(header.toByteArray())
+                          out.write(bytes)
+                          out.flush()
+                      }
+                  } catch (_: Exception) {
+                  } finally {
+                      try { client.close() } catch (_: Exception) {}
+                  }
+              }
+
+              override fun onDestroy() {
+                  running = false
+                  try { serverSocket?.close() } catch (_: Exception) {}
+                  super.onDestroy()
+              }
+
+              override fun onBackPressed() {
+                  if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
+              }
+          }
+          EOF
+
+      - name: Build Debug APK
+        run: gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MySyncApp-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
