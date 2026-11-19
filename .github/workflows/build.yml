@@ -19,7 +19,7 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Generate WebView Android Project
+      - name: Generate ExoPlayer Bridge Android Project
         run: |
           mkdir -p app/src/main/java/com/sync/webapp
           mkdir -p app/src/main/assets
@@ -63,8 +63,8 @@ jobs:
                   applicationId "com.sync.webapp"
                   minSdk 24
                   targetSdk 34
-                  versionCode 1
-                  versionName "1.0"
+                  versionCode 2
+                  versionName "2.0"
               }
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
@@ -72,7 +72,13 @@ jobs:
               }
               kotlinOptions {
                   jvmTarget = '17'
+                  freeCompilerArgs += ['-opt-in=androidx.media3.common.util.UnstableApi']
               }
+          }
+          dependencies {
+              implementation 'androidx.media3:media3-exoplayer:1.4.1'
+              implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
+              implementation 'androidx.media3:media3-common:1.4.1'
           }
           EOF
 
@@ -82,7 +88,7 @@ jobs:
               <uses-permission android:name="android.permission.RECORD_AUDIO"/>
               <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
               <application
-                  android:label="مزامن الصوتيات"
+                  android:label="مزامن المعلق"
                   android:usesCleartextTraffic="true"
                   android:theme="@android:style/Theme.Material.NoActionBar">
                   <activity
@@ -103,22 +109,50 @@ jobs:
 
           import android.Manifest
           import android.app.Activity
+          import android.content.Context
           import android.content.pm.PackageManager
           import android.graphics.Color
           import android.os.Bundle
+          import android.os.Handler
+          import android.os.Looper
           import android.webkit.*
+          import android.widget.Toast
+          import androidx.media3.common.AudioAttributes
+          import androidx.media3.common.C
+          import androidx.media3.common.MediaItem
+          import androidx.media3.common.PlaybackException
+          import androidx.media3.common.Player
+          import androidx.media3.common.audio.AudioProcessor
+          import androidx.media3.common.audio.BaseAudioProcessor
+          import androidx.media3.datasource.DefaultHttpDataSource
+          import androidx.media3.exoplayer.DefaultRenderersFactory
+          import androidx.media3.exoplayer.ExoPlayer
+          import androidx.media3.exoplayer.audio.AudioSink
+          import androidx.media3.exoplayer.audio.DefaultAudioSink
+          import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
           import java.io.*
           import java.net.*
+          import java.nio.ByteBuffer
+          import java.nio.ByteOrder
+          import java.util.concurrent.CountDownLatch
+          import java.util.concurrent.LinkedBlockingQueue
+          import java.util.concurrent.TimeUnit
+          import java.util.concurrent.atomic.AtomicLong
 
           class MainActivity : Activity() {
               private lateinit var webView: WebView
               private var serverSocket: ServerSocket? = null
               @Volatile private var running = true
               private val port = 8765
+              private val mainHandler = Handler(Looper.getMainLooper())
+
+              private val sessionCounter = AtomicLong(0)
+              @Volatile private var activeSessionId = 0L
+              private var activePlayer: ExoPlayer? = null
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
-                  window.statusBarColor = Color.parseColor("#0B1120")
+                  window.statusBarColor = Color.parseColor("#050811")
 
                   if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                       requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 101)
@@ -127,7 +161,7 @@ jobs:
                   startLocalServer()
 
                   webView = WebView(this).apply {
-                      setBackgroundColor(Color.parseColor("#0B1120"))
+                      setBackgroundColor(Color.parseColor("#050811"))
                       settings.javaScriptEnabled = true
                       settings.domStorageEnabled = true
                       settings.mediaPlaybackRequiresUserGesture = false
@@ -174,24 +208,33 @@ jobs:
                       val out = client.getOutputStream()
 
                       if (method == "OPTIONS") {
-                          val resp = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\nContent-Length: 0\r\n\r\n"
+                          val resp = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: *\r\nContent-Length: 0\r\n\r\n"
                           out.write(resp.toByteArray())
                           out.flush()
                           return
                       }
 
-                      if (path.startsWith("/proxy?url=")) {
-                          val targetUrl = URLDecoder.decode(path.substringAfter("/proxy?url="), "UTF-8")
-                          streamWithRawSocket(targetUrl, out, 0)
+                      if (method == "HEAD" && path.startsWith("/proxy?")) {
+                          val resp = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nAccess-Control-Allow-Origin: *\r\nAccept-Ranges: none\r\nConnection: close\r\n\r\n"
+                          out.write(resp.toByteArray())
+                          out.flush()
+                          return
+                      }
+
+                      if (path.startsWith("/proxy?")) {
+                          val query = path.substringAfter("/proxy?")
+                          val rawUrl = query.split("&").firstOrNull { it.startsWith("url=") }?.substringAfter("url=") ?: return
+                          val targetUrl = URLDecoder.decode(rawUrl, "UTF-8")
+                          streamViaExoPlayer(targetUrl, out)
                       } else {
                           var html = assets.open("index.html").bufferedReader().use { it.readText() }
                           val inject = """
                               <script>
                               (function(){
                                 const P = "http://127.0.0.1:$port/proxy?url=";
-                                const wrap = (u) => (typeof u === "string" && /^https?:\/\//i.test(u) && !u.startsWith("http://127.0.0.1")) ? P + encodeURIComponent(u) : u;
-                                const OrigAudio = window.Audio;
-                                window.Audio = function(src) { return new OrigAudio(src ? wrap(src) : undefined); };
+                                const wrap = (u) => (typeof u === "string" && /^https?:\/\//i.test(u) && !u.startsWith("http://127.0.0.1"))
+                                  ? P + encodeURIComponent(u) + "&_t=" + Date.now()
+                                  : u;
                                 const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "src");
                                 if (desc && desc.set) {
                                   Object.defineProperty(HTMLMediaElement.prototype, "src", {
@@ -199,16 +242,6 @@ jobs:
                                     set: function(v) { desc.set.call(this, wrap(v)); }
                                   });
                                 }
-                                const origSetAttr = Element.prototype.setAttribute;
-                                Element.prototype.setAttribute = function(k, v) {
-                                  if (k.toLowerCase() === "src" && (this.tagName === "AUDIO" || this.tagName === "SOURCE")) v = wrap(v);
-                                  return origSetAttr.call(this, k, v);
-                                };
-                                const origFetch = window.fetch;
-                                window.fetch = function(input, init) {
-                                  if (typeof input === "string") input = wrap(input);
-                                  return origFetch.call(this, input, init);
-                                };
                               })();
                               </script>
                           """.trimIndent()
@@ -229,74 +262,206 @@ jobs:
                   }
               }
 
-              private fun streamWithRawSocket(urlStr: String, out: OutputStream, depth: Int) {
-                  if (depth > 3) return
-                  val u = URL(urlStr)
-                  val host = u.host
-                  val targetPort = if (u.port != -1) u.port else if (u.protocol == "https") 443 else 80
-                  val reqPath = (if (u.path.isNullOrEmpty()) "/" else u.path) + (if (u.query != null) "?${u.query}" else "")
-
-                  val remote: Socket = if (u.protocol == "https") {
-                      javax.net.ssl.SSLSocketFactory.getDefault().createSocket(host, targetPort)
-                  } else {
-                      Socket().apply { connect(InetSocketAddress(host, targetPort), 10000) }
-                  }
-                  remote.soTimeout = 20000
-
+              private fun releaseActivePlayer() {
                   try {
-                      val req = "GET $reqPath HTTP/1.0\r\nHost: $host:$targetPort\r\nUser-Agent: VLC/3.0.18\r\nIcy-MetaData: 0\r\nAccept: */*\r\nConnection: close\r\n\r\n"
-                      remote.getOutputStream().write(req.toByteArray())
-                      remote.getOutputStream().flush()
+                      activePlayer?.stop()
+                      activePlayer?.release()
+                  } catch (_: Exception) {}
+                  activePlayer = null
+              }
 
-                      val inp = BufferedInputStream(remote.getInputStream())
-                      var contentType = "audio/mpeg"
-                      var redirectUrl: String? = null
-                      val lineBuf = ByteArrayOutputStream()
+              private fun streamViaExoPlayer(targetUrl: String, out: OutputStream) {
+                  val mySession = sessionCounter.incrementAndGet()
+                  activeSessionId = mySession
 
-                      // Read headers line by line until empty line
-                      while (true) {
-                          lineBuf.reset()
-                          var prev = -1
-                          while (true) {
-                              val b = inp.read()
-                              if (b == -1) return
-                              if (b == '\n'.code) break
-                              if (b != '\r'.code) lineBuf.write(b)
-                              prev = b
+                  val queue = LinkedBlockingQueue<ByteArray>(200)
+                  val formatLatch = CountDownLatch(1)
+                  @Volatile var sampleRate = 44100
+                  @Volatile var channels = 2
+                  @Volatile var errorCode: String? = null
+
+                  val tapProcessor = TapAudioProcessor(
+                      onFormatReady = { sr, ch ->
+                          if (sr > 0 && ch > 0) {
+                              sampleRate = sr
+                              channels = ch
+                              formatLatch.countDown()
                           }
-                          val line = lineBuf.toString("UTF-8").trim()
-                          if (line.isEmpty()) break
-                          if (line.startsWith("Content-Type:", ignoreCase = true)) {
-                              contentType = line.substringAfter(":").trim().split(";")[0]
-                          } else if (line.startsWith("Location:", ignoreCase = true)) {
-                              redirectUrl = line.substringAfter(":").trim()
+                      },
+                      onPcmData = { pcm ->
+                          if (activeSessionId == mySession) {
+                              if (!queue.offer(pcm)) {
+                                  queue.poll()
+                                  queue.offer(pcm)
+                              }
                           }
                       }
+                  )
 
-                      if (redirectUrl != null) {
-                          remote.close()
-                          streamWithRawSocket(redirectUrl, out, depth + 1)
+                  mainHandler.post {
+                      if (activeSessionId != mySession) return@post
+                      releaseActivePlayer()
+                      try {
+                          val httpFactory = DefaultHttpDataSource.Factory()
+                              .setUserAgent("VLC/3.0.18")
+                              .setAllowCrossProtocolRedirects(true)
+                              .setConnectTimeoutMs(12000)
+                              .setReadTimeoutMs(15000)
+
+                          val renderersFactory = object : DefaultRenderersFactory(this) {
+                              override fun buildAudioSink(
+                                  context: Context,
+                                  enableFloatOutput: Boolean,
+                                  enableAudioTrackPlaybackParams: Boolean
+                              ): AudioSink {
+                                  return DefaultAudioSink.Builder(context)
+                                      .setAudioProcessors(arrayOf(tapProcessor))
+                                      .build()
+                              }
+                          }
+
+                          val player = ExoPlayer.Builder(this, renderersFactory)
+                              .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory))
+                              .setAudioAttributes(AudioAttributes.DEFAULT, false)
+                              .build()
+
+                          player.addListener(object : Player.Listener {
+                              override fun onPlayerError(error: PlaybackException) {
+                                  errorCode = error.errorCodeName
+                                  formatLatch.countDown()
+                                  Toast.makeText(this@MainActivity, "خطأ البث: ${error.errorCodeName}", Toast.LENGTH_LONG).show()
+                              }
+                          })
+
+                          activePlayer = player
+                          player.setMediaItem(MediaItem.fromUri(targetUrl))
+                          player.prepare()
+                          player.playWhenReady = true
+                      } catch (e: Exception) {
+                          errorCode = e.message ?: "INIT_ERROR"
+                          formatLatch.countDown()
+                      }
+                  }
+
+                  try {
+                      val ready = formatLatch.await(15, TimeUnit.SECONDS)
+                      if (!ready || errorCode != null || activeSessionId != mySession) {
+                          val resp = "HTTP/1.1 502 Bad Gateway\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\n\r\n"
+                          out.write(resp.toByteArray())
+                          out.flush()
                           return
                       }
 
-                      val respHeader = "HTTP/1.1 200 OK\r\nContent-Type: $contentType\r\nAccess-Control-Allow-Origin: *\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n"
+                      val respHeader = "HTTP/1.1 200 OK\r\n" +
+                          "Content-Type: audio/wav\r\n" +
+                          "Access-Control-Allow-Origin: *\r\n" +
+                          "Accept-Ranges: none\r\n" +
+                          "Cache-Control: no-store, no-cache\r\n" +
+                          "Connection: close\r\n\r\n"
                       out.write(respHeader.toByteArray())
+                      out.write(buildWavHeader(sampleRate, channels))
                       out.flush()
 
-                      val buf = ByteArray(8192)
-                      while (running) {
-                          val n = inp.read(buf)
-                          if (n == -1) break
-                          out.write(buf, 0, n)
-                          out.flush()
+                      var emptyPolls = 0
+                      while (running && activeSessionId == mySession) {
+                          val chunk = queue.poll(500, TimeUnit.MILLISECONDS)
+                          if (chunk != null) {
+                              emptyPolls = 0
+                              out.write(chunk)
+                              out.flush()
+                          } else {
+                              emptyPolls++
+                              if (emptyPolls > 30) break
+                          }
                       }
                   } finally {
-                      try { remote.close() } catch (_: Exception) {}
+                      mainHandler.post {
+                          if (activeSessionId == mySession) {
+                              releaseActivePlayer()
+                          }
+                      }
+                  }
+              }
+
+              private fun buildWavHeader(sampleRate: Int, channels: Int): ByteArray {
+                  val dataSize = 0x7FFFF000
+                  val riffSize = dataSize + 36
+                  val byteRate = sampleRate * channels * 2
+                  val blockAlign = channels * 2
+                  val bb = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+                  bb.put("RIFF".toByteArray())
+                  bb.putInt(riffSize)
+                  bb.put("WAVE".toByteArray())
+                  bb.put("fmt ".toByteArray())
+                  bb.putInt(16)
+                  bb.putShort(1)
+                  bb.putShort(channels.toShort())
+                  bb.putInt(sampleRate)
+                  bb.putInt(byteRate)
+                  bb.putShort(blockAlign.toShort())
+                  bb.putShort(16)
+                  bb.put("data".toByteArray())
+                  bb.putInt(dataSize)
+                  return bb.array()
+              }
+
+              class TapAudioProcessor(
+                  private val onFormatReady: (Int, Int) -> Unit,
+                  private val onPcmData: (ByteArray) -> Unit
+              ) : BaseAudioProcessor() {
+                  private var isFloatInput = false
+
+                  override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+                      return when (inputAudioFormat.encoding) {
+                          C.ENCODING_PCM_16BIT -> {
+                              isFloatInput = false
+                              onFormatReady(inputAudioFormat.sampleRate, inputAudioFormat.channelCount)
+                              inputAudioFormat
+                          }
+                          C.ENCODING_PCM_FLOAT -> {
+                              isFloatInput = true
+                              onFormatReady(inputAudioFormat.sampleRate, inputAudioFormat.channelCount)
+                              AudioProcessor.AudioFormat(
+                                  inputAudioFormat.sampleRate,
+                                  inputAudioFormat.channelCount,
+                                  C.ENCODING_PCM_16BIT
+                              )
+                          }
+                          else -> throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
+                      }
+                  }
+
+                  override fun queueInput(inputBuffer: ByteBuffer) {
+                      val remaining = inputBuffer.remaining()
+                      if (remaining == 0) return
+
+                      val pcmBytes: ByteArray
+                      if (isFloatInput) {
+                          val sampleCount = remaining / 4
+                          pcmBytes = ByteArray(sampleCount * 2)
+                          var idx = 0
+                          while (inputBuffer.remaining() >= 4) {
+                              val f = inputBuffer.float.coerceIn(-1f, 1f)
+                              val s = (f * 32767f).toInt().toShort()
+                              pcmBytes[idx++] = (s.toInt() and 0xFF).toByte()
+                              pcmBytes[idx++] = ((s.toInt() shr 8) and 0xFF).toByte()
+                          }
+                      } else {
+                          pcmBytes = ByteArray(remaining)
+                          inputBuffer.get(pcmBytes)
+                      }
+
+                      onPcmData(pcmBytes)
+
+                      val out = replaceOutputBuffer(pcmBytes.size)
+                      out.put(ByteArray(pcmBytes.size))
+                      out.flip()
                   }
               }
 
               override fun onDestroy() {
                   running = false
+                  mainHandler.post { releaseActivePlayer() }
                   try { serverSocket?.close() } catch (_: Exception) {}
                   super.onDestroy()
               }
