@@ -20,7 +20,7 @@ jobs:
           gradle-version: 8.7
           cache-disabled: true
 
-      - name: Generate ExoPlayer Bridge Android Project
+      - name: Generate Direct PCM ExoPlayer Bridge
         run: |
           mkdir -p app/src/main/java/com/sync/webapp
           mkdir -p app/src/main/assets
@@ -69,8 +69,8 @@ jobs:
                   applicationId "com.sync.webapp"
                   minSdk 24
                   targetSdk 34
-                  versionCode 2
-                  versionName "2.0"
+                  versionCode 3
+                  versionName "3.0"
               }
               compileOptions {
                   sourceCompatibility JavaVersion.VERSION_17
@@ -88,7 +88,7 @@ jobs:
           EOF
 
           cat << 'EOF' > app/src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          <manifest xmlns:android="[http://schemas.android.com/apk/res/android](http://schemas.android.com/apk/res/android)">
               <uses-permission android:name="android.permission.INTERNET"/>
               <uses-permission android:name="android.permission.RECORD_AUDIO"/>
               <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
@@ -121,7 +121,6 @@ jobs:
           import android.os.Handler
           import android.os.Looper
           import android.webkit.*
-          import android.widget.Toast
           import androidx.media3.common.AudioAttributes
           import androidx.media3.common.C
           import androidx.media3.common.MediaItem
@@ -145,6 +144,7 @@ jobs:
           import java.util.concurrent.atomic.AtomicInteger
           import java.util.concurrent.atomic.AtomicLong
           import java.util.concurrent.atomic.AtomicReference
+          import javax.net.ssl.SSLSocketFactory
 
           class MainActivity : Activity() {
               private lateinit var webView: WebView
@@ -183,7 +183,7 @@ jobs:
                   }
 
                   setContentView(webView)
-                  webView.loadUrl("http://127.0.0.1:$port/")
+                  webView.loadUrl("[http://127.0.0.1](http://127.0.0.1):$port/")
               }
 
               private fun startLocalServer() {
@@ -221,51 +221,256 @@ jobs:
                           return
                       }
 
-                      if (method == "HEAD" && path.startsWith("/proxy?")) {
-                          val resp = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\nAccess-Control-Allow-Origin: *\r\nAccept-Ranges: none\r\nConnection: close\r\n\r\n"
+                      if (path.startsWith("/stop")) {
+                          activeSessionId = sessionCounter.incrementAndGet()
+                          mainHandler.post { releaseActivePlayer() }
+                          val resp = "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                           out.write(resp.toByteArray())
                           out.flush()
                           return
                       }
 
-                      if (path.startsWith("/proxy?")) {
-                          val query = path.substringAfter("/proxy?")
+                      if (path.startsWith("/raw?")) {
+                          val query = path.substringAfter("/raw?")
+                          val rawUrl = query.split("&").firstOrNull { it.startsWith("url=") }?.substringAfter("url=") ?: return
+                          val targetUrl = URLDecoder.decode(rawUrl, "UTF-8")
+                          streamWithRawSocket(targetUrl, out, 0)
+                          return
+                      }
+
+                      if (path.startsWith("/pcm?")) {
+                          val query = path.substringAfter("/pcm?")
                           val rawUrl = query.split("&").firstOrNull { it.startsWith("url=") }?.substringAfter("url=") ?: return
                           val targetUrl = URLDecoder.decode(rawUrl, "UTF-8")
                           streamViaExoPlayer(targetUrl, out)
-                      } else {
-                          var html = assets.open("index.html").bufferedReader().use { it.readText() }
-                          val inject = """
-                              <script>
-                              (function(){
-                                const P = "http://127.0.0.1:$port/proxy?url=";
-                                const wrap = (u) => (typeof u === "string" && /^https?:\/\//i.test(u) && !u.startsWith("http://127.0.0.1"))
-                                  ? P + encodeURIComponent(u) + "&_t=" + Date.now()
-                                  : u;
-                                const desc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "src");
-                                if (desc && desc.set) {
-                                  Object.defineProperty(HTMLMediaElement.prototype, "src", {
-                                    get: function() { return desc.get.call(this); },
-                                    set: function(v) { desc.set.call(this, wrap(v)); }
-                                  });
-                                }
-                              })();
-                              </script>
-                          """.trimIndent()
-                          html = if (html.contains("<head>", ignoreCase = true)) {
-                              html.replaceFirst(Regex("<head>", RegexOption.IGNORE_CASE), "<head>\n$inject")
-                          } else {
-                              inject + "\n" + html
-                          }
-                          val bytes = html.toByteArray(Charsets.UTF_8)
-                          val header = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
-                          out.write(header.toByteArray())
-                          out.write(bytes)
-                          out.flush()
+                          return
                       }
+
+                      var html = assets.open("index.html").bufferedReader().use { it.readText() }.trim()
+                      if (html.startsWith("```")) {
+                          html = html.substringAfter("\n")
+                      }
+                      if (html.endsWith("```")) {
+                          html = html.substringBeforeLast("```")
+                      }
+
+                      val inject = """
+                          <script>
+                          (function(){
+                            const BASE = "http://127.0.0.1:$port";
+                            let bridgeCtx = null;
+                            let bridgeGain = null;
+                            let realSrc = "";
+                            let abortCtrl = null;
+                            let activeNodes = [];
+
+                            const AC = window.AudioContext || window.webkitAudioContext;
+                            if (AC) {
+                              const origCreateMES = AC.prototype.createMediaElementSource;
+                              AC.prototype.createMediaElementSource = function(el) {
+                                if (el && el.id === "radioAudio") {
+                                  bridgeCtx = this;
+                                  bridgeGain = this.createGain();
+                                  return bridgeGain;
+                                }
+                                return origCreateMES.call(this, el);
+                              };
+                            }
+
+                            function stopBridge() {
+                              if (abortCtrl) {
+                                try { abortCtrl.abort(); } catch(e) {}
+                                abortCtrl = null;
+                              }
+                              activeNodes.forEach(function(n) { try { n.stop(); n.disconnect(); } catch(e) {} });
+                              activeNodes = [];
+                              fetch(BASE + "/stop").catch(function(){});
+                            }
+
+                            window.addEventListener("DOMContentLoaded", function() {
+                              const audioEl = document.getElementById("radioAudio");
+                              if (!audioEl) return;
+
+                              Object.defineProperty(audioEl, "src", {
+                                get: function() { return realSrc; },
+                                set: function(v) { realSrc = v || ""; }
+                              });
+
+                              audioEl.removeAttribute = function(k) {
+                                if (k === "src") realSrc = "";
+                              };
+                              audioEl.load = function() {};
+                              audioEl.pause = function() { stopBridge(); };
+
+                              audioEl.play = async function() {
+                                stopBridge();
+                                if (!realSrc) throw new Error("لا يوجد رابط بث");
+                                abortCtrl = new AbortController();
+                                const ctrl = abortCtrl;
+                                const resp = await fetch(BASE + "/pcm?url=" + encodeURIComponent(realSrc) + "&_t=" + Date.now(), {
+                                  signal: ctrl.signal
+                                });
+                                if (!resp.ok) {
+                                  const errText = await resp.text().catch(function(){ return "HTTP " + resp.status; });
+                                  setTimeout(function() {
+                                    const noticeEl = document.getElementById("streamNoticeText");
+                                    if (noticeEl) noticeEl.textContent = "سبب الفشل: " + errText + " — الرابط: " + realSrc;
+                                  }, 100);
+                                  throw new Error(errText);
+                                }
+                                const sr = parseInt(resp.headers.get("X-Sample-Rate") || "44100", 10);
+                                const ch = parseInt(resp.headers.get("X-Channels") || "2", 10);
+                                const frameBytes = ch * 2;
+                                const minBytes = Math.floor(sr * 0.12) * frameBytes;
+                                const reader = resp.body.getReader();
+
+                                (async function pump() {
+                                  let leftover = new Uint8Array(0);
+                                  let nextTime = 0;
+                                  try {
+                                    while (!ctrl.signal.aborted) {
+                                      const res = await reader.read();
+                                      if (res.done) break;
+                                      const chunk = res.value;
+                                      const merged = new Uint8Array(leftover.length + chunk.length);
+                                      merged.set(leftover, 0);
+                                      merged.set(chunk, leftover.length);
+                                      if (merged.length < minBytes) {
+                                        leftover = merged;
+                                        continue;
+                                      }
+                                      const usable = merged.length - (merged.length % frameBytes);
+                                      leftover = merged.slice(usable);
+                                      if (!bridgeCtx || !bridgeGain) continue;
+
+                                      const frames = usable / frameBytes;
+                                      const abuf = bridgeCtx.createBuffer(ch, frames, sr);
+                                      const dv = new DataView(merged.buffer, merged.byteOffset, usable);
+                                      const chArrays = [];
+                                      for (let c = 0; c < ch; c++) chArrays.push(abuf.getChannelData(c));
+                                      let off = 0;
+                                      for (let i = 0; i < frames; i++) {
+                                        for (let c = 0; c < ch; c++) {
+                                          chArrays[c][i] = dv.getInt16(off, true) / 32768.0;
+                                          off += 2;
+                                        }
+                                      }
+
+                                      const srcNode = bridgeCtx.createBufferSource();
+                                      srcNode.buffer = abuf;
+                                      srcNode.connect(bridgeGain);
+                                      const now = bridgeCtx.currentTime;
+                                      if (nextTime < now + 0.02 || nextTime > now + 1.5) {
+                                        nextTime = now + 0.15;
+                                      }
+                                      srcNode.start(nextTime);
+                                      nextTime += abuf.duration;
+                                      activeNodes.push(srcNode);
+                                      srcNode.onended = function() {
+                                        const idx = activeNodes.indexOf(srcNode);
+                                        if (idx >= 0) activeNodes.splice(idx, 1);
+                                      };
+                                    }
+                                  } catch (e) {}
+                                })();
+                              };
+                            });
+                          })();
+                          </script>
+                      """.trimIndent()
+
+                      html = if (html.contains("<head>", ignoreCase = true)) {
+                          html.replaceFirst(Regex("<head>", RegexOption.IGNORE_CASE), "<head>\n$inject")
+                      } else {
+                          inject + "\n" + html
+                      }
+                      val bytes = html.toByteArray(Charsets.UTF_8)
+                      val header = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
+                      out.write(header.toByteArray())
+                      out.write(bytes)
+                      out.flush()
                   } catch (_: Exception) {
                   } finally {
                       try { client.close() } catch (_: Exception) {}
+                  }
+              }
+
+              private fun streamWithRawSocket(urlStr: String, out: OutputStream, depth: Int) {
+                  if (depth > 4) return
+                  val u = URL(urlStr)
+                  val host = u.host
+                  val targetPort = if (u.port != -1) u.port else if (u.protocol == "https") 443 else 80
+                  val hostHeader = if ((u.protocol == "http" && targetPort == 80) || (u.protocol == "https" && targetPort == 443)) host else "$host:$targetPort"
+                  val reqPath = (if (u.path.isNullOrEmpty()) "/" else u.path) + (if (u.query != null) "?${u.query}" else "")
+
+                  val remote: Socket = if (u.protocol == "https") {
+                      SSLSocketFactory.getDefault().createSocket(host, targetPort)
+                  } else {
+                      Socket().apply { connect(InetSocketAddress(host, targetPort), 10000) }
+                  }
+                  remote.soTimeout = 20000
+
+                  try {
+                      val req = "GET $reqPath HTTP/1.0\r\nHost: $hostHeader\r\nUser-Agent: VLC/3.0.18\r\nIcy-MetaData: 0\r\nAccept: */*\r\nConnection: close\r\n\r\n"
+                      remote.getOutputStream().write(req.toByteArray())
+                      remote.getOutputStream().flush()
+
+                      val inp = BufferedInputStream(remote.getInputStream())
+                      val lineBuf = ByteArrayOutputStream()
+
+                      fun readHeaderLine(): String? {
+                          lineBuf.reset()
+                          while (true) {
+                              val b = inp.read()
+                              if (b == -1) return if (lineBuf.size() == 0) null else lineBuf.toString("UTF-8").trim()
+                              if (b == '\n'.code) break
+                              if (b != '\r'.code) lineBuf.write(b)
+                          }
+                          return lineBuf.toString("UTF-8").trim()
+                      }
+
+                      val statusLine = readHeaderLine() ?: return
+                      val statusCode = statusLine.split(" ").getOrNull(1)?.toIntOrNull() ?: 200
+                      var contentType = "audio/mpeg"
+                      var redirectUrl: String? = null
+
+                      while (true) {
+                          val line = readHeaderLine() ?: break
+                          if (line.isEmpty()) break
+                          if (line.startsWith("Content-Type:", ignoreCase = true)) {
+                              contentType = line.substringAfter(":").trim().split(";")[0]
+                          } else if (line.startsWith("Location:", ignoreCase = true)) {
+                              redirectUrl = line.substringAfter(":").trim()
+                          }
+                      }
+
+                      if (statusCode in 300..399 && redirectUrl != null) {
+                          val nextUrl = URL(u, redirectUrl).toString()
+                          remote.close()
+                          streamWithRawSocket(nextUrl, out, depth + 1)
+                          return
+                      }
+
+                      if (statusCode !in 200..299) {
+                          val errResp = "HTTP/1.1 $statusCode Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                          out.write(errResp.toByteArray())
+                          out.flush()
+                          return
+                      }
+
+                      val respHeader = "HTTP/1.1 200 OK\r\nContent-Type: $contentType\r\nConnection: close\r\n\r\n"
+                      out.write(respHeader.toByteArray())
+                      out.flush()
+
+                      val buf = ByteArray(8192)
+                      while (running) {
+                          val n = inp.read(buf)
+                          if (n == -1) break
+                          out.write(buf, 0, n)
+                          out.flush()
+                      }
+                  } finally {
+                      try { remote.close() } catch (_: Exception) {}
                   }
               }
 
@@ -285,7 +490,7 @@ jobs:
                   val formatLatch = CountDownLatch(1)
                   val sampleRate = AtomicInteger(44100)
                   val channels = AtomicInteger(2)
-                  val errorCode = AtomicReference<String?>(null)
+                  val errorMsg = AtomicReference<String?>(null)
 
                   val tapProcessor = TapAudioProcessor(
                       onFormatReady = { sr, ch ->
@@ -304,6 +509,12 @@ jobs:
                           }
                       }
                   )
+
+                  val playbackUrl = if (targetUrl.contains(".m3u8", ignoreCase = true)) {
+                      targetUrl
+                  } else {
+                      "http://127.0.0.1:$port/raw?url=" + URLEncoder.encode(targetUrl, "UTF-8")
+                  }
 
                   mainHandler.post {
                       if (activeSessionId != mySession) return@post
@@ -334,39 +545,43 @@ jobs:
 
                           player.addListener(object : Player.Listener {
                               override fun onPlayerError(error: PlaybackException) {
-                                  errorCode.set(error.errorCodeName)
+                                  val detail = error.cause?.message ?: error.message ?: ""
+                                  errorMsg.set("${error.errorCodeName} ($detail)")
                                   formatLatch.countDown()
-                                  Toast.makeText(this@MainActivity, "خطأ البث: ${error.errorCodeName}", Toast.LENGTH_LONG).show()
                               }
                           })
 
                           activePlayer = player
-                          player.setMediaItem(MediaItem.fromUri(targetUrl))
+                          player.setMediaItem(MediaItem.fromUri(playbackUrl))
                           player.prepare()
                           player.playWhenReady = true
                       } catch (e: Exception) {
-                          errorCode.set(e.message ?: "INIT_ERROR")
+                          errorMsg.set(e.message ?: "INIT_ERROR")
                           formatLatch.countDown()
                       }
                   }
 
                   try {
                       val ready = formatLatch.await(15, TimeUnit.SECONDS)
-                      if (!ready || errorCode.get() != null || activeSessionId != mySession) {
-                          val resp = "HTTP/1.1 502 Bad Gateway\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 0\r\n\r\n"
+                      if (!ready || errorMsg.get() != null || activeSessionId != mySession) {
+                          val reason = errorMsg.get() ?: "انتهت مهلة الاتصال بالبث (15 ثانية)"
+                          val errBytes = reason.toByteArray(Charsets.UTF_8)
+                          val resp = "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain; charset=utf-8\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: ${errBytes.size}\r\nConnection: close\r\n\r\n"
                           out.write(resp.toByteArray())
+                          out.write(errBytes)
                           out.flush()
                           return
                       }
 
                       val respHeader = "HTTP/1.1 200 OK\r\n" +
-                          "Content-Type: audio/wav\r\n" +
+                          "Content-Type: application/octet-stream\r\n" +
+                          "X-Sample-Rate: ${sampleRate.get()}\r\n" +
+                          "X-Channels: ${channels.get()}\r\n" +
                           "Access-Control-Allow-Origin: *\r\n" +
-                          "Accept-Ranges: none\r\n" +
+                          "Access-Control-Expose-Headers: *\r\n" +
                           "Cache-Control: no-store, no-cache\r\n" +
                           "Connection: close\r\n\r\n"
                       out.write(respHeader.toByteArray())
-                      out.write(buildWavHeader(sampleRate.get(), channels.get()))
                       out.flush()
 
                       var emptyPolls = 0
@@ -388,28 +603,6 @@ jobs:
                           }
                       }
                   }
-              }
-
-              private fun buildWavHeader(sampleRate: Int, channels: Int): ByteArray {
-                  val dataSize = 0x7FFFF000
-                  val riffSize = dataSize + 36
-                  val byteRate = sampleRate * channels * 2
-                  val blockAlign = channels * 2
-                  val bb = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
-                  bb.put("RIFF".toByteArray())
-                  bb.putInt(riffSize)
-                  bb.put("WAVE".toByteArray())
-                  bb.put("fmt ".toByteArray())
-                  bb.putInt(16)
-                  bb.putShort(1)
-                  bb.putShort(channels.toShort())
-                  bb.putInt(sampleRate)
-                  bb.putInt(byteRate)
-                  bb.putShort(blockAlign.toShort())
-                  bb.putShort(16)
-                  bb.put("data".toByteArray())
-                  bb.putInt(dataSize)
-                  return bb.array()
               }
 
               class TapAudioProcessor(
@@ -441,6 +634,7 @@ jobs:
                   override fun queueInput(inputBuffer: ByteBuffer) {
                       val remaining = inputBuffer.remaining()
                       if (remaining == 0) return
+                      inputBuffer.order(ByteOrder.LITTLE_ENDIAN)
 
                       val pcmBytes: ByteArray
                       if (isFloatInput) {
