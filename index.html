@@ -1,2346 +1,364 @@
-```html
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#060a14" />
-  <title>مُزامِن المعلق | مزامنة راديو كرة القدم مع التلفاز</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      --bg-deep: #050811;
-      --bg-panel: rgba(13, 20, 36, 0.88);
-      --bg-card: rgba(18, 28, 50, 0.72);
-      --bg-card-hover: rgba(26, 39, 68, 0.85);
-      --border-subtle: rgba(148, 163, 184, 0.14);
-      --border-glow: rgba(16, 185, 129, 0.42);
-      --border-cyan: rgba(56, 189, 248, 0.38);
-      --text-primary: #f8fafc;
-      --text-secondary: #94a3b8;
-      --text-muted: #64748b;
-      --accent-emerald: #10b981;
-      --accent-emerald-bright: #34d399;
-      --accent-cyan: #38bdf8;
-      --accent-amber: #f59e0b;
-      --accent-rose: #f43f5e;
-      --shadow-glow: 0 0 28px rgba(16, 185, 129, 0.16);
-      --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.45);
-      --radius-xl: 24px;
-      --radius-lg: 18px;
-      --radius-pill: 9999px;
-      --font-main: 'Cairo', system-ui, -apple-system, 'Segoe UI', Tahoma, Arial, sans-serif;
-    }
-
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      min-height: 100%;
-      background-color: var(--bg-deep);
-      background-image:
-        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(16, 185, 129, 0.14), transparent 65%),
-        radial-gradient(ellipse 60% 40% at 90% 90%, rgba(56, 189, 248, 0.08), transparent 60%);
-      color: var(--text-primary);
-      font-family: var(--font-main);
-      line-height: 1.5;
-      overflow-x: hidden;
-    }
-
-    button, input, select {
-      font-family: inherit;
-    }
-
-    .app-shell {
-      width: 100%;
-      max-width: 520px;
-      margin: 0 auto;
-      padding: 14px 14px 36px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-
-    /* TV Overlay Header */
-    .top-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      padding: 10px 14px;
-      background: var(--bg-panel);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-xl);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      box-shadow: var(--shadow-card);
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .brand-icon {
-      width: 38px;
-      height: 38px;
-      border-radius: 12px;
-      background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(56, 189, 248, 0.2));
-      border: 1px solid var(--border-glow);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      box-shadow: 0 0 16px rgba(16, 185, 129, 0.2);
-    }
-
-    .brand-text {
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-
-    .brand-title {
-      font-size: 1rem;
-      font-weight: 800;
-      letter-spacing: -0.01em;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .brand-sub {
-      font-size: 0.72rem;
-      color: var(--text-secondary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .top-actions {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-shrink: 0;
-    }
-
-    .icon-pill-btn {
-      height: 36px;
-      padding: 0 11px;
-      border-radius: var(--radius-pill);
-      border: 1px solid var(--border-subtle);
-      background: rgba(15, 23, 42, 0.85);
-      color: var(--text-secondary);
-      font-size: 0.76rem;
-      font-weight: 700;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .icon-pill-btn:active {
-      transform: scale(0.96);
-    }
-
-    .icon-pill-btn.active {
-      border-color: var(--border-cyan);
-      color: var(--accent-cyan);
-      background: rgba(56, 189, 248, 0.14);
-      box-shadow: 0 0 14px rgba(56, 189, 248, 0.18);
-    }
-
-    .icon-pill-btn.sim-active {
-      border-color: rgba(245, 158, 11, 0.55);
-      color: #fbbf24;
-      background: rgba(245, 158, 11, 0.14);
-    }
-
-    /* Live TV Status Banner */
-    .status-header {
-      position: relative;
-      padding: 13px 16px;
-      border-radius: var(--radius-lg);
-      background: linear-gradient(135deg, rgba(15, 25, 45, 0.95), rgba(10, 17, 32, 0.92));
-      border: 1px solid var(--border-subtle);
-      box-shadow: var(--shadow-card);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      transition: border-color 0.25s ease, box-shadow 0.25s ease;
-    }
-
-    .status-header.state-measured {
-      border-color: var(--border-cyan);
-      box-shadow: 0 0 24px rgba(56, 189, 248, 0.14);
-    }
-
-    .status-header.state-synced {
-      border-color: var(--border-glow);
-      box-shadow: var(--shadow-glow);
-    }
-
-    .status-header.state-measuring {
-      border-color: rgba(245, 158, 11, 0.55);
-      box-shadow: 0 0 24px rgba(245, 158, 11, 0.16);
-    }
-
-    .status-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      font-size: 0.88rem;
-      font-weight: 700;
-      color: var(--text-primary);
-    }
-
-    .pulse-dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--text-muted);
-      flex-shrink: 0;
-    }
-
-    .pulse-dot.live {
-      background: var(--accent-emerald);
-      box-shadow: 0 0 10px var(--accent-emerald);
-      animation: pulse 1.8s infinite;
-    }
-
-    .pulse-dot.measuring {
-      background: var(--accent-amber);
-      box-shadow: 0 0 10px var(--accent-amber);
-      animation: pulse 0.9s infinite;
-    }
-
-    .pulse-dot.measured {
-      background: var(--accent-cyan);
-      box-shadow: 0 0 10px var(--accent-cyan);
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.45; transform: scale(0.82); }
-    }
-
-    .confidence-chip {
-      font-size: 0.72rem;
-      font-weight: 700;
-      padding: 2px 9px;
-      border-radius: var(--radius-pill);
-      background: rgba(56, 189, 248, 0.14);
-      color: var(--accent-cyan);
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      display: none;
-    }
-
-    .confidence-chip.visible {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    /* Main Panel Card */
-    .panel {
-      background: var(--bg-panel);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-xl);
-      padding: 16px;
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      box-shadow: var(--shadow-card);
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-
-    .panel-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .panel-title {
-      font-size: 0.86rem;
-      font-weight: 800;
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    /* Player Hero */
-    .player-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .channel-info {
-      min-width: 0;
-      flex: 1;
-    }
-
-    .channel-name-display {
-      font-size: 1.15rem;
-      font-weight: 800;
-      color: var(--text-primary);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .stream-meta {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-top: 2px;
-    }
-
-    .play-btn {
-      width: 58px;
-      height: 58px;
-      border-radius: 50%;
-      border: 1px solid rgba(52, 211, 153, 0.55);
-      background: linear-gradient(145deg, #10b981, #059669);
-      color: #03150e;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      flex-shrink: 0;
-      box-shadow: 0 0 24px rgba(16, 185, 129, 0.38);
-      transition: transform 0.16s ease, box-shadow 0.2s ease;
-    }
-
-    .play-btn:active {
-      transform: scale(0.93);
-    }
-
-    .play-btn.playing {
-      background: linear-gradient(145deg, #1e293b, #0f172a);
-      border-color: var(--border-glow);
-      color: var(--accent-emerald-bright);
-      box-shadow: 0 0 22px rgba(16, 185, 129, 0.25);
-    }
-
-    /* Visualizer */
-    .viz-wrap {
-      position: relative;
-      height: 76px;
-      border-radius: 14px;
-      background: rgba(5, 9, 20, 0.75);
-      border: 1px solid rgba(148, 163, 184, 0.12);
-      overflow: hidden;
-    }
-
-    #visualizer {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-
-    .viz-legend {
-      position: absolute;
-      top: 6px;
-      left: 10px;
-      right: 10px;
-      display: flex;
-      justify-content: space-between;
-      pointer-events: none;
-      font-size: 0.68rem;
-      font-weight: 700;
-    }
-
-    .legend-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      padding: 2px 7px;
-      border-radius: 999px;
-      background: rgba(6, 10, 20, 0.65);
-    }
-
-    .legend-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-    }
-
-    /* Volume Row */
-    .volume-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .mute-btn {
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      border: 1px solid var(--border-subtle);
-      background: var(--bg-card);
-      color: var(--text-primary);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      flex-shrink: 0;
-    }
-
-    .mute-btn.muted {
-      color: var(--accent-rose);
-      border-color: rgba(244, 63, 94, 0.4);
-    }
-
-    /* Sliders */
-    input[type="range"] {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 100%;
-      height: 8px;
-      border-radius: 999px;
-      background: rgba(148, 163, 184, 0.18);
-      outline: none;
-      cursor: pointer;
-    }
-
-    input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: var(--accent-emerald-bright);
-      border: 3px solid #06281e;
-      box-shadow: 0 0 12px rgba(16, 185, 129, 0.55);
-      cursor: pointer;
-    }
-
-    input[type="range"].vol-slider {
-      height: 6px;
-    }
-
-    input[type="range"].vol-slider::-webkit-slider-thumb {
-      width: 18px;
-      height: 18px;
-      background: var(--accent-cyan);
-      border-color: #082f49;
-      box-shadow: 0 0 10px rgba(56, 189, 248, 0.5);
-    }
-
-    .vol-label {
-      font-size: 0.78rem;
-      font-weight: 700;
-      color: var(--text-secondary);
-      min-width: 36px;
-      text-align: left;
-      font-variant-numeric: tabular-nums;
-    }
-
-    /* Two-Step Sync Workflow */
-    .sync-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .pill-cta {
-      min-height: 52px;
-      padding: 10px 14px;
-      border-radius: var(--radius-pill);
-      border: 1px solid transparent;
-      font-size: 0.94rem;
-      font-weight: 800;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .pill-cta:active:not(:disabled) {
-      transform: scale(0.97);
-    }
-
-    .pill-cta:disabled {
-      opacity: 0.42;
-      cursor: not-allowed;
-    }
-
-    .btn-measure {
-      background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(14, 165, 233, 0.14));
-      border-color: var(--border-cyan);
-      color: #e0f2fe;
-      box-shadow: 0 0 18px rgba(56, 189, 248, 0.16);
-    }
-
-    .btn-measure.recording {
-      background: linear-gradient(135deg, rgba(244, 63, 94, 0.26), rgba(225, 29, 72, 0.16));
-      border-color: rgba(244, 63, 94, 0.65);
-      color: #ffe4e6;
-      box-shadow: 0 0 20px rgba(244, 63, 94, 0.25);
-    }
-
-    .btn-sync {
-      background: linear-gradient(135deg, #10b981, #059669);
-      border-color: rgba(52, 211, 153, 0.65);
-      color: #022c22;
-      box-shadow: 0 0 22px rgba(16, 185, 129, 0.34);
-    }
-
-    .btn-sync:disabled {
-      background: rgba(30, 41, 59, 0.7);
-      border-color: var(--border-subtle);
-      color: var(--text-muted);
-      box-shadow: none;
-    }
-
-    /* Measurement Progress */
-    .measure-progress-box {
-      display: none;
-      flex-direction: column;
-      gap: 8px;
-      padding: 12px 14px;
-      border-radius: 16px;
-      background: rgba(245, 158, 11, 0.08);
-      border: 1px solid rgba(245, 158, 11, 0.3);
-    }
-
-    .measure-progress-box.visible {
-      display: flex;
-    }
-
-    .progress-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.8rem;
-      font-weight: 700;
-      color: #fde68a;
-    }
-
-    .progress-track {
-      width: 100%;
-      height: 8px;
-      border-radius: 999px;
-      background: rgba(15, 23, 42, 0.85);
-      overflow: hidden;
-    }
-
-    .progress-fill {
-      height: 100%;
-      width: 0%;
-      border-radius: 999px;
-      background: linear-gradient(90deg, #f59e0b, #38bdf8);
-      transition: width 0.15s linear;
-    }
-
-    .duration-selector {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      font-size: 0.78rem;
-      color: var(--text-secondary);
-    }
-
-    .seg-group {
-      display: inline-flex;
-      background: rgba(6, 10, 20, 0.7);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-pill);
-      padding: 3px;
-      gap: 3px;
-    }
-
-    .seg-btn {
-      border: none;
-      background: transparent;
-      color: var(--text-secondary);
-      font-size: 0.74rem;
-      font-weight: 700;
-      padding: 5px 11px;
-      border-radius: var(--radius-pill);
-      cursor: pointer;
-      transition: all 0.18s ease;
-    }
-
-    .seg-btn.active {
-      background: rgba(56, 189, 248, 0.2);
-      color: #e0f2fe;
-    }
-
-    /* Step 2 Decision Card */
-    .result-decision-box {
-      display: none;
-      flex-direction: column;
-      gap: 10px;
-      padding: 12px 14px;
-      border-radius: 16px;
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px solid rgba(56, 189, 248, 0.32);
-    }
-
-    .result-decision-box.visible {
-      display: flex;
-    }
-
-    .result-metrics {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      text-align: center;
-    }
-
-    .metric-mini {
-      background: rgba(6, 10, 20, 0.6);
-      border: 1px solid var(--border-subtle);
-      border-radius: 12px;
-      padding: 8px 6px;
-    }
-
-    .metric-mini-label {
-      font-size: 0.68rem;
-      color: var(--text-secondary);
-      display: block;
-    }
-
-    .metric-mini-val {
-      font-size: 0.96rem;
-      font-weight: 800;
-      color: var(--text-primary);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .result-note {
-      font-size: 0.76rem;
-      color: #bae6fd;
-      margin: 0;
-    }
-
-    /* Delay Time-Shift Controls */
-    .delay-readout-row {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .delay-big {
-      display: flex;
-      align-items: baseline;
-      gap: 6px;
-    }
-
-    .delay-number {
-      font-size: 2.35rem;
-      font-weight: 900;
-      line-height: 1;
-      letter-spacing: -0.02em;
-      color: var(--accent-emerald-bright);
-      font-variant-numeric: tabular-nums;
-      text-shadow: 0 0 22px rgba(16, 185, 129, 0.3);
-    }
-
-    .delay-unit {
-      font-size: 0.9rem;
-      font-weight: 700;
-      color: var(--text-secondary);
-    }
-
-    .reset-live-btn {
-      padding: 6px 13px;
-      border-radius: var(--radius-pill);
-      border: 1px solid var(--border-subtle);
-      background: rgba(15, 23, 42, 0.85);
-      color: var(--text-secondary);
-      font-size: 0.76rem;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .reset-live-btn:active {
-      transform: scale(0.96);
-    }
-
-    .slider-scale {
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.68rem;
-      color: var(--text-muted);
-      margin-top: -6px;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .nudge-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-    }
-
-    .nudge-btn {
-      min-height: 44px;
-      border-radius: var(--radius-pill);
-      border: 1px solid var(--border-subtle);
-      background: var(--bg-card);
-      color: var(--text-primary);
-      font-size: 0.86rem;
-      font-weight: 800;
-      cursor: pointer;
-      font-variant-numeric: tabular-nums;
-      transition: all 0.14s ease;
-    }
-
-    .nudge-btn:active {
-      transform: scale(0.95);
-      background: var(--bg-card-hover);
-      border-color: var(--border-glow);
-    }
-
-    .nudge-btn.plus {
-      border-color: rgba(16, 185, 129, 0.25);
-      color: #a7f3d0;
-    }
-
-    .nudge-btn.minus {
-      border-color: rgba(56, 189, 248, 0.24);
-      color: #bae6fd;
-    }
-
-    /* Collapsible Stream Settings */
-    .accordion-trigger {
-      width: 100%;
-      background: transparent;
-      border: none;
-      color: var(--text-primary);
-      padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      cursor: pointer;
-    }
-
-    .chevron {
-      transition: transform 0.2s ease;
-      color: var(--text-secondary);
-    }
-
-    .accordion-trigger[aria-expanded="true"] .chevron {
-      transform: rotate(180deg);
-    }
-
-    .settings-body {
-      display: none;
-      flex-direction: column;
-      gap: 10px;
-      padding-top: 6px;
-      border-top: 1px solid var(--border-subtle);
-    }
-
-    .settings-body.open {
-      display: flex;
-    }
-
-    .field-group {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    .field-label {
-      font-size: 0.76rem;
-      font-weight: 700;
-      color: var(--text-secondary);
-    }
-
-    .text-input {
-      width: 100%;
-      min-height: 42px;
-      padding: 8px 13px;
-      border-radius: 13px;
-      border: 1px solid var(--border-subtle);
-      background: rgba(5, 9, 20, 0.85);
-      color: var(--text-primary);
-      font-size: 0.86rem;
-      outline: none;
-      transition: border-color 0.2s ease;
-    }
-
-    .text-input:focus {
-      border-color: var(--border-cyan);
-    }
-
-    .text-input.ltr-input {
-      direction: ltr;
-      text-align: left;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 0.78rem;
-    }
-
-    .settings-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .small-pill-btn {
-      flex: 1;
-      min-height: 40px;
-      padding: 6px 12px;
-      border-radius: var(--radius-pill);
-      border: 1px solid var(--border-subtle);
-      background: var(--bg-card);
-      color: var(--text-primary);
-      font-size: 0.8rem;
-      font-weight: 700;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-
-    .small-pill-btn.primary {
-      background: rgba(16, 185, 129, 0.18);
-      border-color: var(--border-glow);
-      color: var(--accent-emerald-bright);
-    }
-
-    .presets-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .preset-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 11px;
-      border-radius: var(--radius-pill);
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid var(--border-subtle);
-      color: var(--text-secondary);
-      font-size: 0.74rem;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .preset-chip.active {
-      border-color: var(--border-glow);
-      color: var(--accent-emerald-bright);
-      background: rgba(16, 185, 129, 0.12);
-    }
-
-    .preset-del {
-      border: none;
-      background: transparent;
-      color: var(--text-muted);
-      font-size: 0.85rem;
-      line-height: 1;
-      padding: 0 2px;
-      cursor: pointer;
-    }
-
-    .notice-banner {
-      display: none;
-      padding: 10px 13px;
-      border-radius: 14px;
-      background: rgba(245, 158, 11, 0.11);
-      border: 1px solid rgba(245, 158, 11, 0.35);
-      color: #fde68a;
-      font-size: 0.77rem;
-      line-height: 1.5;
-      gap: 8px;
-      flex-direction: column;
-    }
-
-    .notice-banner.visible {
-      display: flex;
-    }
-
-    /* Toast */
-    .toast {
-      position: fixed;
-      bottom: 18px;
-      left: 50%;
-      transform: translateX(-50%) translateY(90px);
-      max-width: calc(100vw - 28px);
-      padding: 10px 18px;
-      border-radius: var(--radius-pill);
-      background: rgba(15, 23, 42, 0.96);
-      border: 1px solid var(--border-cyan);
-      color: var(--text-primary);
-      font-size: 0.82rem;
-      font-weight: 700;
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
-      opacity: 0;
-      pointer-events: none;
-      transition: transform 0.25s ease, opacity 0.25s ease;
-      z-index: 100;
-      text-align: center;
-    }
-
-    .toast.show {
-      transform: translateX(-50%) translateY(0);
-      opacity: 1;
-    }
-
-    .footer-tip {
-      text-align: center;
-      font-size: 0.72rem;
-      color: var(--text-muted);
-      padding: 2px 8px;
-    }
-
-    @media (max-width: 380px) {
-      .sync-grid {
-        grid-template-columns: 1fr;
-      }
-      .delay-number {
-        font-size: 2rem;
-      }
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<title>مزامنة تعليق المباراة</title>
+<style>
+:root{--bg:#0b0f14;--card:#141b24;--line:#263243;--text:#eef3f8;--muted:#8fa0b3;--acc:#2ee6a6;--acc-ink:#04281d;--red:#ff6b6b;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.55 "Noto Sans Arabic","Segoe UI",Tahoma,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+main{max-width:30rem;margin:0 auto;padding:.9rem .9rem 2.5rem;display:grid;gap:.8rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:.9rem 1rem}
+.row{display:flex;align-items:center;gap:.5rem}
+.dot{inline-size:.65rem;block-size:.65rem;border-radius:50%;background:var(--muted)}
+.dot.on{background:var(--acc);box-shadow:0 0 0 4px rgba(46,230,166,.2)}
+.name{font-weight:800;font-size:1.1rem}
+.host{margin-inline-start:auto;color:var(--muted);font-size:.8rem;direction:ltr}
+.status{margin-top:.4rem;font-weight:700;font-size:1.02rem;min-height:1.6rem}
+.status.ok{color:var(--acc)}.status.bad{color:var(--red)}
+.note{margin:.3rem 0 0;color:var(--muted);font-size:.88rem}
+.note.bad{color:var(--red)}
+.urlrow{display:flex;gap:.5rem}
+input[type=url],select{flex:1;min-inline-size:0;background:#0f151d;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:.6rem .7rem;font:inherit;font-size:.9rem}
+.sm{background:var(--acc);color:var(--acc-ink);border:0;border-radius:12px;padding:0 1.1rem;font:inherit;font-weight:800;cursor:pointer}
+.measure{position:relative;overflow:hidden;inline-size:100%;min-height:4rem;border:0;border-radius:16px;background:var(--acc);color:var(--acc-ink);font:inherit;font-size:1.2rem;font-weight:800;cursor:pointer}
+.measure:disabled{cursor:default}
+.measure .bar{position:absolute;inset-block:0;inset-inline-start:0;inline-size:0;background:rgba(0,0,0,.22);transition:inline-size .2s linear}
+.measure span{position:relative}
+.durrow{display:flex;align-items:center;gap:.6rem;margin-top:.7rem;color:var(--muted);font-size:.9rem}
+.durrow select{flex:0 0 7rem}
+.pills{display:flex;gap:.5rem}
+.pill{flex:1;min-height:3rem;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;font-size:.92rem;font-weight:700;cursor:pointer;padding:0 .4rem}
+.pill.pri{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+.pill:disabled{opacity:.4;cursor:default}
+.pill[aria-pressed="true"]{background:#3a1f24;border-color:var(--red);color:var(--red)}
+.tune{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.4rem}
+.tune b{font-size:1.4rem;font-variant-numeric:tabular-nums;direction:ltr}
+input[type=range]{inline-size:100%;accent-color:var(--acc);margin:.3rem 0 .6rem}
+.btns{display:grid;grid-template-columns:repeat(6,1fr);gap:.35rem}
+.btns button{min-height:2.6rem;border-radius:12px;border:1px solid var(--line);background:#0f151d;color:var(--text);font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;padding:0}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+</style>
 </head>
 <body>
-  <div class="app-shell">
-    <!-- Top Header -->
-    <header class="top-bar">
-      <div class="brand">
-        <div class="brand-icon" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
-            <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" />
-            <circle cx="12" cy="12" r="2" fill="#34d399" />
-            <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" />
-            <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
-          </svg>
-        </div>
-        <div class="brand-text">
-          <span class="brand-title">مُزامِن المعلق</span>
-          <span class="brand-sub">مزامنة البث الإذاعي مع التلفاز</span>
-        </div>
-      </div>
-      <div class="top-actions">
-        <button id="simToggleBtn" class="icon-pill-btn" type="button" title="وضع المحاكاة للتجربة بدون بث أو تلفاز">
-          <span>محاكاة</span>
-        </button>
-        <button id="wakeLockBtn" class="icon-pill-btn" type="button" title="إبقاء الشاشة مضاءة أثناء المباراة">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="4"></circle>
-            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
-          </svg>
-          <span>الشاشة</span>
-        </button>
-      </div>
-    </header>
+<main>
+  <section class="card">
+    <div class="row"><span class="dot" id="dot"></span><span class="name">قناة التعليق العربي</span><span class="host" id="host"></span></div>
+    <div class="status" id="status" aria-live="polite"></div>
+    <p class="note" id="i1"></p>
+    <p class="note" id="i2"></p>
+  </section>
 
-    <!-- Status Header -->
-    <section id="statusHeader" class="status-header" aria-live="polite">
-      <div class="status-row">
-        <div class="status-badge">
-          <span id="statusDot" class="pulse-dot"></span>
-          <span id="statusText">جاهز • اضغط تشغيل البث ثم فحص التأخير</span>
-        </div>
-        <span id="confidenceChip" class="confidence-chip">ثقة 0%</span>
-      </div>
-    </section>
-
-    <!-- Stream / CORS Notice Banner -->
-    <div id="streamNotice" class="notice-banner" role="status">
-      <div id="streamNoticeText"></div>
-      <div class="settings-actions">
-        <button id="noticeTrySimBtn" class="small-pill-btn primary" type="button">تفعيل وضع المحاكاة للتجربة</button>
-        <button id="noticeDismissBtn" class="small-pill-btn" type="button">إغلاق</button>
-      </div>
+  <section class="card">
+    <div class="urlrow">
+      <input id="url" type="url" dir="ltr" inputmode="url" aria-label="رابط البث" value="http://radio.anisfm.vip/live/mx/1?token=25C3ZQMNS8">
+      <button class="sm" id="play" type="button">تشغيل</button>
     </div>
+    <p class="note bad" id="hint"></p>
+  </section>
 
-    <!-- Live Radio Player Panel -->
-    <section class="panel">
-      <div class="player-top">
-        <div class="channel-info">
-          <div id="channelNameDisplay" class="channel-name-display">راديو أنيس الرياضي — قناة 1</div>
-          <div class="stream-meta">
-            <span id="playerStateLabel">متوقف</span>
-            <span>•</span>
-            <span id="bufferHealthLabel">مخزن التأخير: 30 ثانية</span>
-          </div>
-        </div>
-        <button id="playPauseBtn" class="play-btn" type="button" aria-label="تشغيل أو إيقاف البث">
-          <svg id="playIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="7,4 20,12 7,20"></polygon>
-          </svg>
-          <svg id="pauseIcon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="display:none;">
-            <rect x="6" y="4" width="4" height="16" rx="1"></rect>
-            <rect x="14" y="4" width="4" height="16" rx="1"></rect>
-          </svg>
-        </button>
-      </div>
+  <section class="card">
+    <button class="measure" id="mbtn" type="button"><i class="bar" id="mbar"></i><span id="mtxt">فحص التأخير</span></button>
+    <div class="durrow"><label for="dur">مدة الفحص</label>
+      <select id="dur"><option value="15">15 ث</option><option value="25" selected>25 ث</option><option value="40">40 ث</option><option value="60">60 ث</option></select></div>
+    <p class="note">ضع الهاتف قرب التلفاز. يُكتم صوت القناة أثناء الفحص ولا يتغير شيء قبل أن تضغط «زامن الآن». الفحص الأطول أدق ويكشف تأخيراً أكبر (تقريباً مدته ناقص 8 ثوانٍ).</p>
+  </section>
 
-      <!-- Dual Audio Visualizer -->
-      <div class="viz-wrap">
-        <canvas id="visualizer"></canvas>
-        <div class="viz-legend">
-          <span class="legend-item" style="color:#34d399;">
-            <span class="legend-dot" style="background:#34d399;"></span>
-            <span>صوت الراديو</span>
-          </span>
-          <span id="micLegend" class="legend-item" style="color:#38bdf8; opacity:0.45;">
-            <span class="legend-dot" style="background:#38bdf8;"></span>
-            <span>ميكروفون التلفاز</span>
-          </span>
-        </div>
-      </div>
-
-      <!-- Volume Control -->
-      <div class="volume-row">
-        <button id="muteBtn" class="mute-btn" type="button" aria-label="كتم الصوت">
-          <svg id="volOnIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
-          </svg>
-          <svg id="volOffIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <line x1="23" y1="9" x2="17" y2="15"></line>
-            <line x1="17" y1="9" x2="23" y2="15"></line>
-          </svg>
-        </button>
-        <input id="volumeSlider" class="vol-slider" type="range" min="0" max="100" value="90" aria-label="مستوى الصوت" />
-        <span id="volumeValue" class="vol-label">90%</span>
-      </div>
-    </section>
-
-    <!-- Two-Step Optional Sync Panel -->
-    <section class="panel">
-      <div class="panel-header">
-        <div class="panel-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-            <line x1="12" y1="19" x2="12" y2="22"></line>
-          </svg>
-          <span>المزامنة الذكية (خطوتان اختياريتان)</span>
-        </div>
-        <div class="seg-group" role="group" aria-label="مدة الفحص">
-          <button class="seg-btn" data-dur="15" type="button">15 ث</button>
-          <button class="seg-btn active" data-dur="20" type="button">20 ث</button>
-          <button class="seg-btn" data-dur="25" type="button">25 ث</button>
-        </div>
-      </div>
-
-      <div class="sync-grid">
-        <button id="measureBtn" class="pill-cta btn-measure" type="button">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-          </svg>
-          <span id="measureBtnLabel">فحص التأخير</span>
-        </button>
-
-        <button id="syncNowBtn" class="pill-cta btn-sync" type="button" disabled>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-          <span id="syncNowLabel">زامن الآن</span>
-        </button>
-      </div>
-
-      <!-- Live Countdown Progress -->
-      <div id="measureProgressBox" class="measure-progress-box">
-        <div class="progress-head">
-          <span id="measureStageText">جارٍ التقاط صوت التلفاز والراديو...</span>
-          <span id="measureCountdown" style="font-variant-numeric: tabular-nums;">20 ث</span>
-        </div>
-        <div class="progress-track">
-          <div id="measureProgressFill" class="progress-fill"></div>
-        </div>
-      </div>
-
-      <!-- Step 2 Result Review (Before Applying) -->
-      <div id="resultDecisionBox" class="result-decision-box">
-        <div class="result-metrics">
-          <div class="metric-mini">
-            <span class="metric-mini-label">تأخير الصورة</span>
-            <span id="detectedTvVal" class="metric-mini-val">--</span>
-          </div>
-          <div class="metric-mini">
-            <span class="metric-mini-label">تأخير الصوت الحالي</span>
-            <span id="currentAudioVal" class="metric-mini-val">--</span>
-          </div>
-          <div class="metric-mini">
-            <span class="metric-mini-label">دقة التطابق</span>
-            <span id="detectedConfVal" class="metric-mini-val">--</span>
-          </div>
-        </div>
-        <p id="resultNoteText" class="result-note">لم يتم تغيير الصوت بعد. اضغط «زامن الآن» للتطبيق أو عدّل يدوياً بالأذن.</p>
-      </div>
-    </section>
-
-    <!-- Manual Delay Fine-Tuning Panel -->
-    <section class="panel">
-      <div class="panel-header">
-        <div class="panel-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-          <span>التحكم اليدوي بتأخير الصوت</span>
-        </div>
-        <button id="resetDelayBtn" class="reset-live-btn" type="button">إرجاع للبث المباشر (0.00 ث)</button>
-      </div>
-
-      <div class="delay-readout-row">
-        <div class="delay-big">
-          <span id="delayDisplay" class="delay-number">0.00</span>
-          <span class="delay-unit">ثانية</span>
-        </div>
-        <span id="delayModeHint" style="font-size:0.76rem; color:var(--text-secondary);">بث مباشر بدون تأخير</span>
-      </div>
-
-      <input id="delaySlider" type="range" min="0" max="30" step="0.05" value="0" aria-label="تأخير صوت الراديو بالثواني" />
-      <div class="slider-scale">
-        <span>0 ث</span>
-        <span>10 ث</span>
-        <span>20 ث</span>
-        <span>30 ث</span>
-      </div>
-
-      <div class="nudge-grid">
-        <button class="nudge-btn minus" data-delta="-2" type="button">-2.0 ث</button>
-        <button class="nudge-btn minus" data-delta="-0.5" type="button">-0.5 ث</button>
-        <button class="nudge-btn minus" data-delta="-0.1" type="button">-0.1 ث</button>
-        <button class="nudge-btn plus" data-delta="0.1" type="button">+0.1 ث</button>
-        <button class="nudge-btn plus" data-delta="0.5" type="button">+0.5 ث</button>
-        <button class="nudge-btn plus" data-delta="2" type="button">+2.0 ث</button>
-      </div>
-    </section>
-
-    <!-- Stream & Channel Settings Accordion -->
-    <section class="panel">
-      <button id="settingsToggle" class="accordion-trigger" type="button" aria-expanded="false">
-        <span class="panel-title">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"></path>
-          </svg>
-          <span>إعدادات رابط البث والقنوات المحفوظة</span>
-        </span>
-        <svg class="chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="6 9 12 15 18 9"></polyline>
-        </svg>
-      </button>
-
-      <div id="settingsBody" class="settings-body">
-        <div class="field-group">
-          <label class="field-label" for="channelNameInput">اسم القناة / المعلق</label>
-          <input id="channelNameInput" class="text-input" type="text" value="راديو أنيس الرياضي — قناة 1" placeholder="مثال: قناة التعليق العربي 1" />
-        </div>
-        <div class="field-group">
-          <label class="field-label" for="streamUrlInput">رابط البث المباشر (Stream URL)</label>
-          <input id="streamUrlInput" class="text-input ltr-input" type="url" value="http://radio.anisfm.vip/live/mx/1?token=25C3ZQMNS8" placeholder="http://..." />
-        </div>
-        <div class="settings-actions">
-          <button id="applyStreamBtn" class="small-pill-btn primary" type="button">تطبيق الرابط</button>
-          <button id="savePresetBtn" class="small-pill-btn" type="button">حفظ كقناة سريعة</button>
-        </div>
-        <div class="field-group">
-          <span class="field-label">القنوات المحفوظة</span>
-          <div id="presetsList" class="presets-list"></div>
-        </div>
-      </div>
-    </section>
-
-    <div class="footer-tip">
-      نصيحة: ارفع صوت التلفاز قليلاً أثناء «فحص التأخير» فقط، ثم اكتم التلفاز بعد الضغط على «زامن الآن».
-    </div>
+  <div class="pills">
+    <button class="pill pri" id="sync" type="button" disabled>زامن الآن</button>
+    <button class="pill" id="mute" type="button" aria-pressed="false">🔊 صوت القناة</button>
+    <button class="pill" id="stopsync" type="button">إيقاف المزامنة</button>
   </div>
 
-  <!-- Hidden Audio Element for Live Radio -->
-  <audio id="radioAudio" crossorigin="anonymous" preload="none" playsinline></audio>
+  <section class="card">
+    <div class="tune"><span>تأخير صوت القناة</span><b id="dval">0.00 ث</b></div>
+    <input id="slider" type="range" min="0" max="30" step="0.05" value="0" dir="ltr" aria-label="تأخير صوت القناة بالثواني">
+    <div class="btns" dir="ltr">
+      <button type="button" data-d="-5">−5 ث</button><button type="button" data-d="-1">−1 ث</button><button type="button" data-d="-0.25">−0.25</button>
+      <button type="button" data-d="0.25">+0.25</button><button type="button" data-d="1">+1 ث</button><button type="button" data-d="5">+5 ث</button>
+    </div>
+  </section>
+</main>
 
-  <!-- Toast Notification -->
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script>
+(function () {
+  "use strict";
+  var $ = function (i) { return document.getElementById(i); };
+  var BANDS = [[40, 250], [250, 3000], [3000, 7000]];            // ضجيج منخفض / صوت المعلق / صفير وهسيس
+  var KEEP = 100, PRE = 25, MINOV = 8, MAXD = 30;                  // ثوانٍ: ذاكرة البث، ما قبل الفحص، أقل تداخل، أقصى تأخير
+  var WORKLET = "class T extends AudioWorkletProcessor{constructor(){super();this.n=0;this.a=new Float32Array(4096);this.b=new Float32Array(4096)}process(i){var m=i[0]&&i[0][0],s=i[1]&&i[1][0],k=(m||s)?(m||s).length:128;for(var j=0;j<k;j++){this.a[this.n+j]=m?m[j]:0;this.b[this.n+j]=s?s[j]:0}this.n+=k;if(this.n>=4096){this.port.postMessage({a:this.a.slice(0),b:this.b.slice(0)});this.n=0}return true}}registerProcessor('tap',T)";
 
-  <script>
-    (function () {
-      'use strict';
+  var ctx = null, tap = null, dly = null, out = null, el = null, srcNode = null;
+  var sr = 48000, ring = [], total = 0, meas = null, proxyOK = false;
+  var playing = false, muted = false, busy = false, delay = 0, measured = null, mode = "idle";
 
-      const DEFAULT_STREAM = {
-        id: 'default-anisfm',
-        name: 'راديو أنيس الرياضي — قناة 1',
-        url: 'http://radio.anisfm.vip/live/mx/1?token=25C3ZQMNS8'
+  function f1(x) { return x.toFixed(1); }
+  function f2(x) { return x.toFixed(2); }
+  function status(t, cls) { var s = $("status"); s.textContent = t; s.className = "status" + (cls ? " " + cls : ""); }
+
+  /* ---------- عرض الحالة ---------- */
+  function render() {
+    var D = measured ? measured.D : 0, pic = Math.max(D, 0), s, cls = "";
+    if (mode === "synced") { s = "تمت المزامنة ✓ • الصورة " + f1(pic) + " ث • الصوت " + f2(delay) + " ث"; cls = "ok"; }
+    else if (mode === "measured") s = "تم الفحص • الصورة " + f1(pic) + " ث • الصوت " + f2(Math.max(-D, 0)) + " ث";
+    else if (mode === "manual") s = "ضبط يدوي • الصوت " + f2(delay) + " ث" + (pic > 0.05 ? " • الصورة " + f1(pic) + " ث" : "");
+    else s = playing ? "البث مباشر • الصوت " + f2(delay) + " ث" : "اضغط «تشغيل» لبدء البث";
+    if (!busy) status(s, cls);
+    var i1 = "", i2 = "", bad = false;
+    if (measured && mode !== "idle") {
+      if (D > 0.05) i1 = "التلفاز متقدّم: اضبط تأخير الفيديو في الرسيفر على " + f1(D) + " ثانية، أو أوقف القناة مؤقتاً (Timeshift) بالمدة نفسها.";
+      else if (D < -0.05) i1 = mode === "synced" ? "تم تأخير صوت القناة " + f2(-D) + " ثانية لتطابق الصورة." : "صوت القناة متقدّم بمقدار " + f2(-D) + " ثانية. اضغط «زامن الآن» لتأخيره.";
+      else i1 = "الصوت والصورة متزامنان تقريباً.";
+      var q = { HIGH: "عالية", MEDIUM: "متوسطة", LOW: "منخفضة" }[measured.q];
+      bad = measured.q === "LOW";
+      i2 = "الثقة: " + q + " (قوة التطابق " + f1(measured.z) + ")" + (bad ? " — اعتبر الرقم تخميناً. جرّب مدة 60 ث وأعد الفحص عند صافرة أو هتاف." : "");
+    }
+    $("i1").textContent = i1; $("i2").textContent = i2; $("i2").className = "note" + (bad ? " bad" : "");
+    $("sync").disabled = !measured || busy;
+  }
+  function progress(p, label) { $("mbar").style.width = (p * 100) + "%"; $("mtxt").textContent = label; }
+  function applyGain() { if (out) out.gain.value = (muted || busy) ? 0 : 1; }
+  function setDelay(v) {
+    delay = Math.min(MAXD, Math.max(0, Math.round(v * 100) / 100));
+    if (dly) dly.delayTime.setValueAtTime(delay, ctx.currentTime);
+    $("slider").value = delay; $("dval").textContent = f2(delay) + " ث";
+  }
+
+  /* ---------- المشغّل: البث ← تأخير ← مكبر الصوت، ومعه نقطة تسجيل للتحليل ---------- */
+  async function initCtx() {
+    if (ctx) return;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC(); sr = ctx.sampleRate;
+      await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" })));
+      tap = new AudioWorkletNode(ctx, "tap", { numberOfInputs: 2, numberOfOutputs: 0, channelCount: 1, channelCountMode: "explicit" });
+      tap.port.onmessage = onChunk;
+      dly = ctx.createDelay(MAXD); out = ctx.createGain();
+      dly.connect(out); out.connect(ctx.destination);
+      setDelay(delay); applyGain();
+    } catch (e) { ctx = null; throw e; }
+  }
+  function onChunk(e) {                                           // كل رسالة تحمل الميكروفون والبث معاً بالمحاذاة نفسها
+    var b = e.data.b;
+    ring.push({ i: total, b: b }); total += b.length;
+    while (ring.length > 1 && total - ring[0].i > KEEP * sr) ring.shift();
+    if (meas) { if (meas.start === null) meas.start = total - b.length; meas.mic.push(e.data.a); meas.n += b.length; }
+  }
+  function stopStream() {
+    if (el) { el.onerror = null; el.onplaying = null; el.pause(); el.removeAttribute("src"); try { el.load(); } catch (e) {} }
+    if (srcNode) { try { srcNode.disconnect(); } catch (e) {} }
+    el = null; srcNode = null; playing = false; ring = []; total = 0;
+    $("dot").className = "dot"; $("play").textContent = "تشغيل";
+  }
+  async function play() {
+    if (el) { stopStream(); render(); return; }
+    try {
+      await initCtx(); await ctx.resume();
+      var raw = $("url").value.trim();
+      if (!raw) return;
+      try { $("host").textContent = new URL(raw).hostname; } catch (e) {}
+      el = new Audio(); el.crossOrigin = "anonymous";
+      el.src = proxyOK ? "/proxy?url=" + encodeURIComponent(raw) : raw;
+      el.onplaying = function () { playing = true; $("dot").className = "dot on"; render(); };
+      el.onerror = function () {
+        stopStream();
+        status(proxyOK ? "تعذّر تشغيل البث. تحقق من الرابط."
+          : "تعذّر تشغيل البث. غالباً لا يسمح الخادم بقراءة صوته من المتصفح: شغّل proxy_server.py وافتح http://localhost:8000", "bad");
       };
+      srcNode = ctx.createMediaElementSource(el);
+      srcNode.connect(dly); srcNode.connect(tap, 0, 1);
+      $("play").textContent = "إيقاف"; status("جارٍ الاتصال بالبث…", "");
+      await el.play();
+    } catch (e) {
+      if (el === null && ctx) return;                              // رسالة الخطأ ظهرت من onerror
+      stopStream(); status("تعذّر التشغيل: " + (e && e.message ? e.message : e), "bad");
+    }
+  }
 
-      const STORAGE_KEY = 'football_radio_sync_v1';
-      const MAX_DELAY_SEC = 30.0;
-      const ENVELOPE_HZ = 50; // 20ms per sample (lightweight RAM usage)
-      const SAMPLE_INTERVAL_MS = 1000 / ENVELOPE_HZ;
-
-      // State
-      const state = {
-        isPlaying: false,
-        isMuted: false,
-        volume: 0.9,
-        currentDelay: 0.0,
-        detectedTvDelay: null,
-        detectedConfidence: null,
-        measureDurationSec: 20,
-        isMeasuring: false,
-        simMode: false,
-        simTrueOffset: 7.5,
-        wakeLockActive: false,
-        streamUrl: DEFAULT_STREAM.url,
-        channelName: DEFAULT_STREAM.name,
-        presets: [DEFAULT_STREAM],
-        corsFallbackActive: false
-      };
-
-      // Web Audio Graph references
-      let audioCtx = null;
-      let mediaSource = null;
-      let inputGain = null;
-      let rawRadioAnalyser = null;
-      let delayNodes = [];
-      let outputGain = null;
-      let outputAnalyser = null;
-
-      // Simulation Audio references
-      let simMasterNode = null;
-      let simTvDelayNode = null;
-      let simTvAnalyser = null;
-      let simEventTimer = null;
-
-      // Microphone & Measurement references
-      let micStream = null;
-      let micSource = null;
-      let micAnalyser = null;
-      let measureTimer = null;
-      let measureStartTs = 0;
-      let radioEnvelope = [];
-      let micEnvelope = [];
-      let radioTimeBuf = null;
-      let micTimeBuf = null;
-
-      // Visualizer & Wake Lock
-      let vizRafId = null;
-      let wakeLockSentinel = null;
-      let toastTimeout = null;
-
-      // DOM Elements
-      const el = {
-        audio: document.getElementById('radioAudio'),
-        statusHeader: document.getElementById('statusHeader'),
-        statusDot: document.getElementById('statusDot'),
-        statusText: document.getElementById('statusText'),
-        confidenceChip: document.getElementById('confidenceChip'),
-        streamNotice: document.getElementById('streamNotice'),
-        streamNoticeText: document.getElementById('streamNoticeText'),
-        noticeTrySimBtn: document.getElementById('noticeTrySimBtn'),
-        noticeDismissBtn: document.getElementById('noticeDismissBtn'),
-        channelNameDisplay: document.getElementById('channelNameDisplay'),
-        playerStateLabel: document.getElementById('playerStateLabel'),
-        bufferHealthLabel: document.getElementById('bufferHealthLabel'),
-        playPauseBtn: document.getElementById('playPauseBtn'),
-        playIcon: document.getElementById('playIcon'),
-        pauseIcon: document.getElementById('pauseIcon'),
-        visualizer: document.getElementById('visualizer'),
-        micLegend: document.getElementById('micLegend'),
-        muteBtn: document.getElementById('muteBtn'),
-        volOnIcon: document.getElementById('volOnIcon'),
-        volOffIcon: document.getElementById('volOffIcon'),
-        volumeSlider: document.getElementById('volumeSlider'),
-        volumeValue: document.getElementById('volumeValue'),
-        measureBtn: document.getElementById('measureBtn'),
-        measureBtnLabel: document.getElementById('measureBtnLabel'),
-        syncNowBtn: document.getElementById('syncNowBtn'),
-        syncNowLabel: document.getElementById('syncNowLabel'),
-        measureProgressBox: document.getElementById('measureProgressBox'),
-        measureStageText: document.getElementById('measureStageText'),
-        measureCountdown: document.getElementById('measureCountdown'),
-        measureProgressFill: document.getElementById('measureProgressFill'),
-        resultDecisionBox: document.getElementById('resultDecisionBox'),
-        detectedTvVal: document.getElementById('detectedTvVal'),
-        currentAudioVal: document.getElementById('currentAudioVal'),
-        detectedConfVal: document.getElementById('detectedConfVal'),
-        resultNoteText: document.getElementById('resultNoteText'),
-        delayDisplay: document.getElementById('delayDisplay'),
-        delayModeHint: document.getElementById('delayModeHint'),
-        delaySlider: document.getElementById('delaySlider'),
-        resetDelayBtn: document.getElementById('resetDelayBtn'),
-        settingsToggle: document.getElementById('settingsToggle'),
-        settingsBody: document.getElementById('settingsBody'),
-        channelNameInput: document.getElementById('channelNameInput'),
-        streamUrlInput: document.getElementById('streamUrlInput'),
-        applyStreamBtn: document.getElementById('applyStreamBtn'),
-        savePresetBtn: document.getElementById('savePresetBtn'),
-        presetsList: document.getElementById('presetsList'),
-        simToggleBtn: document.getElementById('simToggleBtn'),
-        wakeLockBtn: document.getElementById('wakeLockBtn'),
-        toast: document.getElementById('toast')
-      };
-
-      // Storage Helpers (Safe try/catch)
-      function loadSavedState() {
-        try {
-          const raw = localStorage.getItem(STORAGE_KEY);
-          if (!raw) return;
-          const parsed = JSON.parse(raw);
-          if (typeof parsed.streamUrl === 'string' && parsed.streamUrl.trim()) {
-            state.streamUrl = parsed.streamUrl.trim();
-          }
-          if (typeof parsed.channelName === 'string' && parsed.channelName.trim()) {
-            state.channelName = parsed.channelName.trim();
-          }
-          if (Array.isArray(parsed.presets) && parsed.presets.length > 0) {
-            state.presets = parsed.presets;
-          }
-          if (typeof parsed.currentDelay === 'number' && !isNaN(parsed.currentDelay)) {
-            state.currentDelay = clamp(parsed.currentDelay, 0, MAX_DELAY_SEC);
-          }
-          if (typeof parsed.volume === 'number' && !isNaN(parsed.volume)) {
-            state.volume = clamp(parsed.volume, 0, 1);
-          }
-          if ([15, 20, 25].includes(parsed.measureDurationSec)) {
-            state.measureDurationSec = parsed.measureDurationSec;
-          }
-        } catch (e) {
-          // Ignore storage errors in restricted environments
+  /* ---------- التحليل: نطاقات ترددية ← |الصوت| ← قفزات ← ارتباط متقاطع (FFT) ---------- */
+  function band(x, hp, lp) {
+    var c = new OfflineAudioContext(1, x.length, sr), b = c.createBuffer(1, x.length, sr);
+    b.getChannelData(0).set(x);
+    var s = c.createBufferSource(); s.buffer = b;
+    var n = s;
+    [["highpass", hp], ["lowpass", lp]].forEach(function (p) {
+      var q = c.createBiquadFilter(); q.type = p[0]; q.frequency.value = p[1]; q.Q.value = 0.7071; n.connect(q); n = q;
+    });
+    n.connect(c.destination); s.start();
+    return c.startRendering().then(function (o) { return o.getChannelData(0); });
+  }
+  function envelope(x, down) {
+    var n = Math.floor(x.length / down), e = new Float32Array(n);
+    for (var i = 0; i < n; i++) { var s = 0; for (var j = i * down, k = j + down; j < k; j++) s += Math.abs(x[j]); e[i] = s / down; }
+    return e;
+  }
+  function spike(e, rate) {                                       // الشدة فوق متوسطها خلال ثانيتين فقط
+    var n = e.length, h = Math.max(1, Math.round(rate)), cs = new Float64Array(n + 1), f = new Float64Array(n), i, sum = 0;
+    for (i = 0; i < n; i++) cs[i + 1] = cs[i] + e[i];
+    for (i = 0; i < n; i++) {
+      var a = Math.max(0, i - h), b = Math.min(n, i + h + 1), v = e[i] - (cs[b] - cs[a]) / (b - a);
+      f[i] = v > 0 ? v : 0; sum += f[i];
+    }
+    var mu = sum / n, ss = 0;
+    for (i = 0; i < n; i++) { f[i] -= mu; ss += f[i] * f[i]; }
+    var sd = Math.sqrt(ss / n);
+    if (!(sd > 1e-9)) return null;
+    for (i = 0; i < n; i++) f[i] /= sd;
+    return f;
+  }
+  function fft(re, im, inv) {
+    var n = re.length, i, j, bit, t;
+    for (i = 1, j = 0; i < n; i++) {
+      bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (var len = 2; len <= n; len <<= 1) {
+      var ang = (inv ? 2 : -2) * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang), half = len >> 1;
+      for (i = 0; i < n; i += len) {
+        var cr = 1, ci = 0;
+        for (var k = 0; k < half; k++) {
+          var p = i + k, q = p + half, xr = re[q] * cr - im[q] * ci, xi = re[q] * ci + im[q] * cr;
+          re[q] = re[p] - xr; im[q] = im[p] - xi; re[p] += xr; im[p] += xi;
+          t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
         }
       }
+    }
+    if (inv) for (i = 0; i < n; i++) { re[i] /= n; im[i] /= n; }
+  }
+  function xcorr(pairs) {                                         // c[k] = Σ a[n+k]·b[n] مجموعاً على النطاقات
+    var na = pairs[0][0].length, nb = pairs[0][1].length, N = 1;
+    while (N < na + nb) N <<= 1;
+    var pr = new Float64Array(N), pi = new Float64Array(N);
+    pairs.forEach(function (p) {
+      var ar = new Float64Array(N), ai = new Float64Array(N), br = new Float64Array(N), bi = new Float64Array(N);
+      ar.set(p[0]); br.set(p[1]); fft(ar, ai, false); fft(br, bi, false);
+      for (var k = 0; k < N; k++) { pr[k] += ar[k] * br[k] + ai[k] * bi[k]; pi[k] += ai[k] * br[k] - ar[k] * bi[k]; }
+    });
+    fft(pr, pi, true);
+    return pr;
+  }
+  function analyze(pairs, rate, pre, minOv) {                     // A = الميكروفون، B = مقطع البث الذي يبدأ قبل الميكروفون بـ pre ثانية
+    var na = pairs[0][0].length, nb = pairs[0][1].length, c = xcorr(pairs), N = c.length;
+    var minS = Math.max(1, Math.floor(minOv * rate)), lags = [], sc = [], lag, ov, i;
+    for (lag = -(nb - 1); lag <= na - 1; lag++) {
+      ov = Math.min(na, nb + lag) - Math.max(0, lag);
+      if (ov < minS) continue;
+      lags.push(lag); sc.push(c[lag >= 0 ? lag : N + lag] / Math.sqrt(ov));
+    }
+    if (sc.length < 50) return null;
+    var k = 0;
+    for (i = 1; i < sc.length; i++) if (sc[i] > sc[k]) k = i;
+    var sorted = Float64Array.from(sc).sort(), med = sorted[sorted.length >> 1];
+    var dev = Float64Array.from(sc, function (v) { return Math.abs(v - med); }).sort();
+    var spread = Math.max(dev[dev.length >> 1] * 1.4826, 1e-9), z = (sc[k] - med) / spread;
+    var g = Math.round(1.5 * rate), r2 = -Infinity;
+    for (i = 0; i < sc.length; i++) if (Math.abs(i - k) > g && sc[i] > r2) r2 = sc[i];
+    var z2 = r2 === -Infinity ? 0 : (r2 - med) / spread;
+    var q = (z >= 9 && z2 <= 0.5 * z) ? "HIGH" : (z >= 6 && z2 <= 0.65 * z) ? "MEDIUM" : "LOW";
+    return { delay: -lags[k] / rate - pre, z: z, z2: z2, q: q };  // موجب = البث العربي متأخر عن التلفاز
+  }
+  async function analyzeAll(mic, str, pre) {
+    var down = Math.max(1, Math.round(sr / 320)), rate = sr / down, pairs = [];
+    for (var b = 0; b < BANDS.length; b++) {
+      var fa = spike(envelope(await band(mic, BANDS[b][0], BANDS[b][1]), down), rate);
+      var fb = spike(envelope(await band(str, BANDS[b][0], BANDS[b][1]), down), rate);
+      if (fa && fb) pairs.push([fa, fb]);
+    }
+    return pairs.length ? analyze(pairs, rate, pre, Math.min(MINOV, 0.4 * mic.length / sr)) : null;
+  }
+  function slice(from, to) {
+    var o = new Float32Array(Math.max(0, to - from));
+    for (var i = 0; i < ring.length; i++) {
+      var c = ring[i], s = c.i, e = s + c.b.length;
+      if (e <= from || s >= to) continue;
+      var a = Math.max(from, s), z = Math.min(to, e);
+      o.set(c.b.subarray(a - s, z - s), a - from);
+    }
+    return o;
+  }
+  function rms(x) { var s = 0, n = 0; for (var i = 0; i < x.length; i += 7) { s += x[i] * x[i]; n++; } return n ? Math.sqrt(s / n) : 0; }
 
-      function persistState() {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            streamUrl: state.streamUrl,
-            channelName: state.channelName,
-            presets: state.presets,
-            currentDelay: state.currentDelay,
-            volume: state.volume,
-            measureDurationSec: state.measureDurationSec
-          }));
-        } catch (e) {
-          // Ignore storage errors
-        }
+  /* ---------- الخطوة 1: فحص فقط، دون تغيير أي شيء في التشغيل ---------- */
+  async function measure() {
+    if (busy) return;
+    if (!playing) { status("شغّل البث أولاً ثم أعد الفحص.", "bad"); return; }
+    var dur = +$("dur").value, mic = null, ms = null, err = null;
+    busy = true; applyGain(); $("mbtn").disabled = true; $("sync").disabled = true;
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("secure");
+      mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
+      ms = ctx.createMediaStreamSource(mic); ms.connect(tap, 0, 0);
+      var need = Math.round(dur * sr), t0 = performance.now();
+      meas = { start: null, mic: [], n: 0 };
+      status("جارٍ الفحص… ضع الهاتف قرب التلفاز", "");
+      await new Promise(function (resolve, reject) {
+        var iv = setInterval(function () {
+          var sec = (performance.now() - t0) / 1000;
+          progress(Math.min(1, meas.n / need), "جارٍ الفحص… " + Math.max(0, Math.ceil(dur - meas.n / sr)));
+          if (meas.n === 0 && sec > 8) { clearInterval(iv); reject(new Error("mic")); }
+          else if (meas.n >= need || sec > dur + 12) { clearInterval(iv); resolve(); }
+        }, 200);
+      });
+      var m = meas; meas = null;
+      mic.getTracks().forEach(function (t) { t.stop(); }); ms.disconnect();
+      progress(1, "جارٍ التحليل…"); status("جارٍ التحليل…", "");
+      await new Promise(function (r) { setTimeout(r, 30); });
+      var n = Math.min(m.n, need), micArr = new Float32Array(n), o = 0;
+      for (var i = 0; i < m.mic.length && o < n; i++) {
+        var c = m.mic[i], len = Math.min(c.length, n - o);
+        micArr.set(c.subarray(0, len), o); o += len;
       }
-
-      function clamp(val, min, max) {
-        return Math.min(max, Math.max(min, val));
-      }
-
-      function formatSec(val, digits = 2) {
-        const n = Number.isFinite(val) ? val : 0;
-        return n.toFixed(digits);
-      }
-
-      function showToast(msg) {
-        el.toast.textContent = msg;
-        el.toast.classList.add('show');
-        if (toastTimeout) clearTimeout(toastTimeout);
-        toastTimeout = setTimeout(() => {
-          el.toast.classList.remove('show');
-        }, 2800);
-      }
-
-      function showNotice(text) {
-        el.streamNoticeText.textContent = text;
-        el.streamNotice.classList.add('visible');
-      }
-
-      function hideNotice() {
-        el.streamNotice.classList.remove('visible');
-      }
-
-      // Initialize Web Audio API Graph (3 chained 10.5s DelayNodes = 30s smooth real-time time-shift)
-      function ensureAudioGraph() {
-        if (audioCtx) return;
-        const AudioContextCls = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContextCls();
-
-        inputGain = audioCtx.createGain();
-        inputGain.gain.value = 1.0;
-
-        // Raw radio analyser taps BEFORE delay chain so measurement always compares live radio vs TV
-        rawRadioAnalyser = audioCtx.createAnalyser();
-        rawRadioAnalyser.fftSize = 1024;
-        rawRadioAnalyser.smoothingTimeConstant = 0.25;
-        radioTimeBuf = new Float32Array(rawRadioAnalyser.fftSize);
-
-        // 3 chained DelayNodes (each 10.5s max) for reliable 30s cross-browser real-time buffering
-        delayNodes = [
-          audioCtx.createDelay(10.5),
-          audioCtx.createDelay(10.5),
-          audioCtx.createDelay(10.5)
-        ];
-
-        outputGain = audioCtx.createGain();
-        outputGain.gain.value = state.isMuted ? 0 : state.volume;
-
-        outputAnalyser = audioCtx.createAnalyser();
-        outputAnalyser.fftSize = 512;
-        outputAnalyser.smoothingTimeConstant = 0.65;
-
-        // Connect main chain
-        inputGain.connect(rawRadioAnalyser);
-        inputGain.connect(delayNodes[0]);
-        delayNodes[0].connect(delayNodes[1]);
-        delayNodes[1].connect(delayNodes[2]);
-        delayNodes[2].connect(outputGain);
-        outputGain.connect(outputAnalyser);
-        outputAnalyser.connect(audioCtx.destination);
-
-        // Connect HTML5 Audio element once
-        if (!mediaSource) {
-          try {
-            mediaSource = audioCtx.createMediaElementSource(el.audio);
-            mediaSource.connect(inputGain);
-          } catch (err) {
-            console.warn('MediaElementSource setup issue:', err);
-          }
-        }
-
-        applyDelayToNodes(state.currentDelay, true);
-      }
-
-      function applyDelayToNodes(seconds, immediate = false) {
-        if (!audioCtx || delayNodes.length !== 3) return;
-        const total = clamp(seconds, 0, MAX_DELAY_SEC);
-        const d0 = Math.min(10.0, total);
-        const d1 = Math.min(10.0, Math.max(0, total - 10.0));
-        const d2 = Math.min(10.0, Math.max(0, total - 20.0));
-        const vals = [d0, d1, d2];
-        const now = audioCtx.currentTime;
-
-        delayNodes.forEach((node, idx) => {
-          node.delayTime.cancelScheduledValues(now);
-          if (immediate) {
-            node.delayTime.setValueAtTime(vals[idx], now);
-          } else {
-            node.delayTime.setValueAtTime(node.delayTime.value, now);
-            node.delayTime.linearRampToValueAtTime(vals[idx], now + 0.14);
-          }
-        });
-      }
-
-      function setDelay(seconds, source = 'manual') {
-        const clamped = Math.round(clamp(seconds, 0, MAX_DELAY_SEC) * 100) / 100;
-        state.currentDelay = clamped;
-        applyDelayToNodes(clamped, false);
-        updateDelayUI();
-        if (state.detectedTvDelay !== null) {
-          el.currentAudioVal.textContent = `${formatSec(state.currentDelay)} ث`;
-          if (source === 'sync') {
-            updateStatusHeader('synced');
-          } else {
-            updateStatusHeader('measured');
-          }
-        }
-        persistState();
-      }
-
-      function updateDelayUI() {
-        el.delayDisplay.textContent = formatSec(state.currentDelay, 2);
-        el.delaySlider.value = state.currentDelay;
-        if (state.currentDelay < 0.05) {
-          el.delayModeHint.textContent = 'بث مباشر بدون تأخير';
-        } else {
-          el.delayModeHint.textContent = `الصوت مؤخر بمقدار ${formatSec(state.currentDelay, 2)} ث`;
-        }
-      }
-
-      function updateVolumeUI() {
-        const pct = Math.round(state.volume * 100);
-        el.volumeSlider.value = pct;
-        el.volumeValue.textContent = state.isMuted ? 'مكتوم' : `${pct}%`;
-        el.muteBtn.classList.toggle('muted', state.isMuted);
-        el.volOnIcon.style.display = state.isMuted ? 'none' : 'block';
-        el.volOffIcon.style.display = state.isMuted ? 'block' : 'none';
-
-        if (outputGain && audioCtx) {
-          const now = audioCtx.currentTime;
-          outputGain.gain.setTargetAtTime(state.isMuted ? 0 : state.volume, now, 0.03);
-        }
-        el.audio.muted = state.corsFallbackActive ? state.isMuted : false;
-        el.audio.volume = state.corsFallbackActive ? state.volume : 1.0;
-      }
-
-      function updateStatusHeader(mode) {
-        el.statusHeader.classList.remove('state-measured', 'state-synced', 'state-measuring');
-        el.statusDot.classList.remove('live', 'measuring', 'measured');
-
-        if (mode === 'measuring') {
-          el.statusHeader.classList.add('state-measuring');
-          el.statusDot.classList.add('measuring');
-          el.statusText.textContent = 'جارٍ فحص التأخير... وجّه الهاتف نحو التلفاز';
-          el.confidenceChip.classList.remove('visible');
-          return;
-        }
-
-        if (mode === 'measured' && state.detectedTvDelay !== null) {
-          el.statusHeader.classList.add('state-measured');
-          el.statusDot.classList.add('measured');
-          el.statusText.textContent = `تم الفحص • الصورة ${formatSec(state.detectedTvDelay, 1)} ث • الصوت ${formatSec(state.currentDelay, 2)} ث`;
-          if (state.detectedConfidence !== null) {
-            el.confidenceChip.textContent = `ثقة ${state.detectedConfidence}%`;
-            el.confidenceChip.classList.add('visible');
-          }
-          return;
-        }
-
-        if (mode === 'synced' && state.detectedTvDelay !== null) {
-          el.statusHeader.classList.add('state-synced');
-          el.statusDot.classList.add('live');
-          el.statusText.textContent = `تمت المزامنة • الصورة ${formatSec(state.detectedTvDelay, 1)} ث • الصوت ${formatSec(state.currentDelay, 2)} ث`;
-          if (state.detectedConfidence !== null) {
-            el.confidenceChip.textContent = `متزامن`;
-            el.confidenceChip.classList.add('visible');
-          }
-          return;
-        }
-
-        if (state.isPlaying) {
-          el.statusDot.classList.add('live');
-          el.statusText.textContent = state.simMode
-            ? `وضع المحاكاة نشط • الصوت ${formatSec(state.currentDelay, 2)} ث`
-            : `البث يعمل • تأخير الصوت ${formatSec(state.currentDelay, 2)} ث`;
-          el.confidenceChip.classList.remove('visible');
-        } else {
-          el.statusText.textContent = 'جاهز • اضغط تشغيل البث ثم فحص التأخير';
-          el.confidenceChip.classList.remove('visible');
-        }
-      }
-
-      // Simulation Engine (Generates realistic stadium crowd + commentary spikes + delayed virtual TV)
-      function startSimulationAudio() {
-        ensureAudioGraph();
-        stopSimulationAudio();
-
-        simMasterNode = audioCtx.createGain();
-        simMasterNode.gain.value = 0.55;
-
-        // Continuous stadium crowd ambience (bandpass filtered noise)
-        const noiseLen = audioCtx.sampleRate * 3;
-        const noiseBuf = audioCtx.createBuffer(1, noiseLen, audioCtx.sampleRate);
-        const data = noiseBuf.getChannelData(0);
-        let b0 = 0, b1 = 0, b2 = 0;
-        for (let i = 0; i < noiseLen; i++) {
-          const white = Math.random() * 2 - 1;
-          b0 = 0.997 * b0 + white * 0.029;
-          b1 = 0.985 * b1 + white * 0.032;
-          b2 = 0.950 * b2 + white * 0.048;
-          data[i] = (b0 + b1 + b2 + white * 0.015) * 0.5;
-        }
-
-        const crowdSrc = audioCtx.createBufferSource();
-        crowdSrc.buffer = noiseBuf;
-        crowdSrc.loop = true;
-
-        const crowdFilter = audioCtx.createBiquadFilter();
-        crowdFilter.type = 'bandpass';
-        crowdFilter.frequency.value = 520;
-        crowdFilter.Q.value = 0.8;
-
-        const crowdGain = audioCtx.createGain();
-        crowdGain.gain.value = 0.16;
-
-        crowdSrc.connect(crowdFilter);
-        crowdFilter.connect(crowdGain);
-        crowdGain.connect(simMasterNode);
-        crowdSrc.start();
-
-        // Connect live simulation radio into the main Web Audio delay chain
-        simMasterNode.connect(inputGain);
-
-        // Create a virtual TV signal delayed by simTrueOffset (e.g., 7.5s) for testing measurement
-        simTvDelayNode = audioCtx.createDelay(15.0);
-        simTvDelayNode.delayTime.value = state.simTrueOffset;
-        simTvAnalyser = audioCtx.createAnalyser();
-        simTvAnalyser.fftSize = 1024;
-        simTvAnalyser.smoothingTimeConstant = 0.25;
-        simMasterNode.connect(simTvDelayNode);
-        simTvDelayNode.connect(simTvAnalyser);
-
-        // Trigger realistic crowd roars, commentator bursts, and referee whistles
-        const triggerEvent = () => {
-          if (!audioCtx || !simMasterNode) return;
-          const now = audioCtx.currentTime;
-          const roll = Math.random();
-
-          if (roll < 0.22) {
-            // Referee whistle (~3.6 kHz)
-            const osc = audioCtx.createOscillator();
-            const g = audioCtx.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(3550 + Math.random() * 250, now);
-            g.gain.setValueAtTime(0.001, now);
-            g.gain.linearRampToValueAtTime(0.26, now + 0.03);
-            g.gain.setValueAtTime(0.22, now + 0.28);
-            g.gain.exponentialRampToValueAtTime(0.001, now + 0.42);
-            osc.connect(g);
-            g.connect(simMasterNode);
-            osc.start(now);
-            osc.stop(now + 0.45);
-          } else {
-            // Crowd roar / commentary excitement spike
-            const roarGain = audioCtx.createGain();
-            roarGain.gain.setValueAtTime(0.001, now);
-            roarGain.gain.linearRampToValueAtTime(0.55 + Math.random() * 0.35, now + 0.12);
-            roarGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75 + Math.random() * 0.6);
-
-            const burstSrc = audioCtx.createBufferSource();
-            burstSrc.buffer = noiseBuf;
-            const burstFilter = audioCtx.createBiquadFilter();
-            burstFilter.type = 'bandpass';
-            burstFilter.frequency.value = 850 + Math.random() * 650;
-            burstFilter.Q.value = 1.2;
-
-            burstSrc.connect(burstFilter);
-            burstFilter.connect(roarGain);
-            roarGain.connect(simMasterNode);
-            burstSrc.start(now, Math.random() * 1.2, 1.5);
-          }
-        };
-
-        triggerEvent();
-        simEventTimer = setInterval(triggerEvent, 1450);
-        simMasterNode._crowdSrc = crowdSrc;
-      }
-
-      function stopSimulationAudio() {
-        if (simEventTimer) {
-          clearInterval(simEventTimer);
-          simEventTimer = null;
-        }
-        if (simMasterNode) {
-          try {
-            if (simMasterNode._crowdSrc) simMasterNode._crowdSrc.stop();
-            simMasterNode.disconnect();
-          } catch (e) {}
-          simMasterNode = null;
-        }
-        if (simTvDelayNode) {
-          try { simTvDelayNode.disconnect(); } catch (e) {}
-          simTvDelayNode = null;
-        }
-        simTvAnalyser = null;
-      }
-
-      // Playback Control
-      async function startPlayback() {
-        hideNotice();
-        ensureAudioGraph();
-        if (audioCtx.state === 'suspended') {
-          await audioCtx.resume();
-        }
-
-        if (state.simMode) {
-          el.audio.pause();
-          startSimulationAudio();
-          state.isPlaying = true;
-          updatePlaybackUI();
-          updateStatusHeader(state.detectedTvDelay !== null ? 'measured' : 'live');
-          showToast(`بدأت المحاكاة (تأخير التلفاز الافتراضي ${state.simTrueOffset.toFixed(1)} ث)`);
-          return;
-        }
-
-        // Real Live Radio Stream
-        state.corsFallbackActive = false;
-        el.audio.crossOrigin = 'anonymous';
-        el.audio.src = state.streamUrl;
-        el.playerStateLabel.textContent = 'جارٍ الاتصال بالبث...';
-
-        try {
-          await el.audio.play();
-          state.isPlaying = true;
-          updatePlaybackUI();
-          updateStatusHeader(state.detectedTvDelay !== null ? 'measured' : 'live');
-        } catch (err) {
-          state.isPlaying = false;
-          updatePlaybackUI();
-          el.playerStateLabel.textContent = 'تعذر الاتصال بالبث';
-          const isHttpsPage = window.location.protocol === 'https:';
-          const isHttpStream = state.streamUrl.trim().toLowerCase().startsWith('http://');
-          if (isHttpsPage && isHttpStream) {
-            showNotice('رابط البث يبدأ بـ http:// بينما الصفحة تعمل عبر https://، وقد يمنع المتصفح البث غير المشفر أو يقيّد معالجة الصوت. لتشغيله على هاتفك افتح الملف محلياً على جهازك، أو فعّل وضع المحاكاة لتجربة المزامنة الآن.');
-          } else {
-            showNotice('تعذر تشغيل رابط البث الحالي أو أن الخادم لا يدعم مشاركة الصوت مع معالج التأخير. تأكد من الرابط أو فعّل وضع المحاكاة للتجربة.');
-          }
-        }
-      }
-
-      function stopPlayback() {
-        if (state.isMeasuring) {
-          stopMeasurement(true);
-        }
-        stopSimulationAudio();
-        el.audio.pause();
-        el.audio.removeAttribute('src');
-        el.audio.load();
-        state.isPlaying = false;
-        updatePlaybackUI();
-        updateStatusHeader('idle');
-      }
-
-      function updatePlaybackUI() {
-        el.playPauseBtn.classList.toggle('playing', state.isPlaying);
-        el.playIcon.style.display = state.isPlaying ? 'none' : 'block';
-        el.pauseIcon.style.display = state.isPlaying ? 'block' : 'none';
-        if (state.isPlaying) {
-          el.playerStateLabel.textContent = state.simMode ? 'محاكاة صوتية نشطة' : 'بث مباشر متصل';
-        } else {
-          el.playerStateLabel.textContent = 'متوقف';
-        }
-      }
-
-      // Compute RMS amplitude from AnalyserNode
-      function getAnalyserRMS(analyser, buf) {
-        if (!analyser || !buf) return 0;
-        analyser.getFloatTimeDomainData(buf);
-        let sum = 0;
-        for (let i = 0; i < buf.length; i++) {
-          const v = buf[i];
-          sum += v * v;
-        }
-        return Math.sqrt(sum / buf.length);
-      }
-
-      // Step 1: Start Measurement Only (DO NOT change playback delay automatically)
-      async function startMeasurement() {
-        if (!state.isPlaying) {
-          await startPlayback();
-          if (!state.isPlaying) return;
-        }
-
-        ensureAudioGraph();
-        if (audioCtx.state === 'suspended') {
-          await audioCtx.resume();
-        }
-
-        // Acquire Microphone unless in Simulation Mode
-        if (!state.simMode) {
-          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            showNotice('المتصفح لا يدعم الوصول للميكروفون في هذا الوضع. افتح الملف على متصفح Chrome في هاتفك أو جرّب وضع المحاكاة.');
-            return;
-          }
-          try {
-            micStream = await navigator.mediaDevices.getUserMedia({
-              audio: {
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false
-              }
-            });
-            micSource = audioCtx.createMediaStreamSource(micStream);
-            micAnalyser = audioCtx.createAnalyser();
-            micAnalyser.fftSize = 1024;
-            micAnalyser.smoothingTimeConstant = 0.25;
-            micSource.connect(micAnalyser);
-            micTimeBuf = new Float32Array(micAnalyser.fftSize);
-          } catch (err) {
-            showNotice('تعذر الوصول إلى ميكروفون الهاتف. اسمح بإذن الميكروفون ثم أعد المحاولة، أو فعّل وضع المحاكاة للتجربة.');
-            return;
-          }
-        } else {
-          micTimeBuf = new Float32Array(1024);
-        }
-
-        state.isMeasuring = true;
-        radioEnvelope = [];
-        micEnvelope = [];
-        measureStartTs = performance.now();
-
-        el.measureBtn.classList.add('recording');
-        el.measureBtnLabel.textContent = 'إيقاف الفحص';
-        el.measureProgressBox.classList.add('visible');
-        el.micLegend.style.opacity = '1';
-        el.measureStageText.textContent = state.simMode
-          ? 'جارٍ التقاط إشارة التلفاز الافتراضي والراديو...'
-          : 'جارٍ التقاط صوت التلفاز عبر الميكروفون...';
-        updateStatusHeader('measuring');
-
-        const totalMs = state.measureDurationSec * 1000;
-
-        measureTimer = setInterval(() => {
-          const elapsed = performance.now() - measureStartTs;
-          const remainingSec = Math.max(0, Math.ceil((totalMs - elapsed) / 1000));
-          const pct = clamp((elapsed / totalMs) * 100, 0, 100);
-
-          el.measureCountdown.textContent = `${remainingSec} ث`;
-          el.measureProgressFill.style.width = `${pct.toFixed(1)}%`;
-
-          // Capture lightweight amplitude envelope at 50 Hz
-          const rRms = getAnalyserRMS(rawRadioAnalyser, radioTimeBuf);
-          let mRms = 0;
-          if (state.simMode && simTvAnalyser) {
-            // Add tiny ambient room noise to simulated TV mic signal
-            mRms = getAnalyserRMS(simTvAnalyser, micTimeBuf) + Math.random() * 0.008;
-          } else {
-            mRms = getAnalyserRMS(micAnalyser, micTimeBuf);
-          }
-
-          radioEnvelope.push(rRms);
-          micEnvelope.push(mRms);
-
-          if (elapsed >= totalMs) {
-            finishMeasurement();
-          }
-        }, SAMPLE_INTERVAL_MS);
-      }
-
-      function cleanupMic() {
-        if (measureTimer) {
-          clearInterval(measureTimer);
-          measureTimer = null;
-        }
-        if (micSource) {
-          try { micSource.disconnect(); } catch (e) {}
-          micSource = null;
-        }
-        if (micStream) {
-          micStream.getTracks().forEach((t) => t.stop());
-          micStream = null;
-        }
-        micAnalyser = null;
-        el.micLegend.style.opacity = '0.45';
-      }
-
-      function stopMeasurement(cancelled = false) {
-        cleanupMic();
-        state.isMeasuring = false;
-        el.measureBtn.classList.remove('recording');
-        el.measureBtnLabel.textContent = 'فحص التأخير';
-        el.measureProgressBox.classList.remove('visible');
-        el.measureProgressFill.style.width = '0%';
-        if (cancelled) {
-          updateStatusHeader(state.detectedTvDelay !== null ? 'measured' : 'live');
-          showToast('تم إلغاء الفحص');
-        }
-      }
-
-      // Lightweight Spike / Envelope Cross-Correlation in RAM
-      function buildSpikeSignal(arr) {
-        const n = arr.length;
-        const smoothed = new Float32Array(n);
-        for (let i = 0; i < n; i++) {
-          const prev = i > 0 ? arr[i - 1] : arr[i];
-          const next = i < n - 1 ? arr[i + 1] : arr[i];
-          smoothed[i] = (prev + 2 * arr[i] + next) * 0.25;
-        }
-
-        // Positive first-difference (onset spikes for whistles & crowd roars)
-        const onset = new Float32Array(n);
-        for (let i = 1; i < n; i++) {
-          const d = smoothed[i] - smoothed[i - 1];
-          onset[i] = d > 0 ? d : 0;
-        }
-
-        // Normalize both and blend 65% spike onset + 35% envelope
-        const normEnv = zNormalize(smoothed);
-        const normOnset = zNormalize(onset);
-        const combined = new Float32Array(n);
-        for (let i = 0; i < n; i++) {
-          combined[i] = 0.65 * normOnset[i] + 0.35 * normEnv[i];
-        }
-        return zNormalize(combined);
-      }
-
-      function zNormalize(arr) {
-        const n = arr.length;
-        let mean = 0;
-        for (let i = 0; i < n; i++) mean += arr[i];
-        mean /= Math.max(1, n);
-
-        let variance = 0;
-        for (let i = 0; i < n; i++) {
-          const diff = arr[i] - mean;
-          variance += diff * diff;
-        }
-        const std = Math.sqrt(variance / Math.max(1, n));
-        const out = new Float32Array(n);
-        if (std < 1e-7) return out;
-        for (let i = 0; i < n; i++) {
-          out[i] = (arr[i] - mean) / std;
-        }
-        return out;
-      }
-
-      function computeCrossCorrelation(radioRaw, micRaw) {
-        const n = Math.min(radioRaw.length, micRaw.length);
-        if (n < ENVELOPE_HZ * 6) {
-          return { delaySec: 0, confidence: 0, lowSignal: true };
-        }
-
-        // Check signal energy
-        let radioEnergy = 0;
-        let micEnergy = 0;
-        for (let i = 0; i < n; i++) {
-          radioEnergy += radioRaw[i];
-          micEnergy += micRaw[i];
-        }
-        if (radioEnergy / n < 1e-5 || micEnergy / n < 1e-5) {
-          return { delaySec: 0, confidence: 0, lowSignal: true };
-        }
-
-        const rSig = buildSpikeSignal(radioRaw.slice(0, n));
-        const mSig = buildSpikeSignal(micRaw.slice(0, n));
-
-        // Search lags: TV lagging behind radio by 0s..min(22s, n-5s), plus small negative window (-3s..0s)
-        const minOverlap = ENVELOPE_HZ * 5;
-        const maxPosLag = Math.min(ENVELOPE_HZ * 25, n - minOverlap);
-        const minNegLag = -Math.min(ENVELOPE_HZ * 3, n - minOverlap);
-
-        const scores = [];
-        let bestScore = -Infinity;
-        let bestLag = 0;
-        let scoreSum = 0;
-        let scoreSqSum = 0;
-
-        for (let lag = minNegLag; lag <= maxPosLag; lag++) {
-          let sum = 0;
-          let rNorm = 0;
-          let mNorm = 0;
-
-          const startR = lag < 0 ? -lag : 0;
-          const endR = lag < 0 ? n : n - lag;
-
-          for (let i = startR; i < endR; i++) {
-            const rv = rSig[i];
-            const mv = mSig[i + lag];
-            sum += rv * mv;
-            rNorm += rv * rv;
-            mNorm += mv * mv;
-          }
-
-          const denom = Math.sqrt(rNorm * mNorm);
-          const corr = denom > 1e-8 ? sum / denom : 0;
-          scores.push({ lag, corr });
-          scoreSum += corr;
-          scoreSqSum += corr * corr;
-
-          if (corr > bestScore) {
-            bestScore = corr;
-            bestLag = lag;
-          }
-        }
-
-        // Parabolic interpolation for sub-frame precision
-        const bestIdx = bestLag - minNegLag;
-        let refinedLag = bestLag;
-        if (bestIdx > 0 && bestIdx < scores.length - 1) {
-          const y1 = scores[bestIdx - 1].corr;
-          const y2 = scores[bestIdx].corr;
-          const y3 = scores[bestIdx + 1].corr;
-          const denom = (y1 - 2 * y2 + y3);
-          if (Math.abs(denom) > 1e-7) {
-            const shift = clamp(0.5 * (y1 - y3) / denom, -0.5, 0.5);
-            refinedLag = bestLag + shift;
-          }
-        }
-
-        // Confidence from correlation peak & z-score above sidelobes
-        const count = Math.max(1, scores.length);
-        const meanScore = scoreSum / count;
-        const stdScore = Math.sqrt(Math.max(1e-8, scoreSqSum / count - meanScore * meanScore));
-        const psr = (bestScore - meanScore) / stdScore;
-        const rawConf = clamp(Math.round((bestScore * 68) + (psr * 8.5)), 8, 99);
-
-        return {
-          delaySec: refinedLag / ENVELOPE_HZ,
-          confidence: rawConf,
-          lowSignal: false
-        };
-      }
-
-      function finishMeasurement() {
-        const rCopy = radioEnvelope.slice();
-        const mCopy = micEnvelope.slice();
-        stopMeasurement(false);
-
-        const result = computeCrossCorrelation(rCopy, mCopy);
-
-        if (result.lowSignal) {
-          showToast('الإشارة الصوتية ضعيفة جداً. تأكد من ارتفاع صوت التلفاز والراديو.');
-          updateStatusHeader('live');
-          return;
-        }
-
-        const clampedTv = Math.max(0, Math.min(MAX_DELAY_SEC, result.delaySec));
-        state.detectedTvDelay = Math.round(clampedTv * 100) / 100;
-        state.detectedConfidence = result.confidence;
-
-        // STEP 1 ONLY: Display result in status header & decision card WITHOUT altering playback!
-        updateStatusHeader('measured');
-        el.resultDecisionBox.classList.add('visible');
-        el.detectedTvVal.textContent = `${formatSec(state.detectedTvDelay, 2)} ث`;
-        el.currentAudioVal.textContent = `${formatSec(state.currentDelay, 2)} ث`;
-        el.detectedConfVal.textContent = `${state.detectedConfidence}%`;
-
-        if (result.delaySec < -0.25) {
-          el.resultNoteText.textContent = 'الراديو متأخر عن التلفاز بالفعل؛ يُنصح بإبقاء التأخير عند 0.00 ث.';
-        } else if (state.detectedConfidence < 35) {
-          el.resultNoteText.textContent = 'التطابق منخفض نسبياً بسبب ضوضاء محيطة. يمكنك تطبيق النتيجة أو إعادة الفحص بجانب التلفاز.';
-        } else {
-          el.resultNoteText.textContent = 'لم يتم تغيير الصوت بعد. اضغط «زامن الآن» لتطبيق التأخير المكتشف أو عدّل يدوياً.';
-        }
-
-        el.syncNowBtn.disabled = false;
-        el.syncNowLabel.textContent = `زامن الآن (${formatSec(state.detectedTvDelay, 1)} ث)`;
-        showToast(`تم الفحص: تأخير الصورة ${formatSec(state.detectedTvDelay, 1)} ث`);
-      }
-
-      // Visualizer Canvas Loop
-      function startVisualizer() {
-        const canvas = el.visualizer;
-        const ctx = canvas.getContext('2d');
-
-        function resizeCanvas() {
-          const rect = canvas.getBoundingClientRect();
-          const dpr = Math.min(window.devicePixelRatio || 1, 2);
-          canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-          canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        }
-
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
-
-        const freqData = new Uint8Array(128);
-        const micFreqData = new Uint8Array(128);
-
-        function draw() {
-          vizRafId = requestAnimationFrame(draw);
-          const w = canvas.clientWidth;
-          const h = canvas.clientHeight;
-          ctx.clearRect(0, 0, w, h);
-
-          // Subtle center grid line
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.1)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(0, h / 2);
-          ctx.lineTo(w, h / 2);
-          ctx.stroke();
-
-          // Draw Radio Spectrum Bars (Emerald)
-          const barCount = 44;
-          const gap = 3;
-          const barW = Math.max(2, (w - gap * (barCount - 1)) / barCount);
-
-          if (state.isPlaying && outputAnalyser) {
-            outputAnalyser.getByteFrequencyData(freqData);
-            for (let i = 0; i < barCount; i++) {
-              const v = freqData[i] / 255;
-              const barH = Math.max(3, v * (h - 24));
-              const x = i * (barW + gap);
-              const y = h - barH - 4;
-              ctx.fillStyle = `rgba(52, 211, 153, ${0.28 + v * 0.65})`;
-              ctx.fillRect(x, y, barW, barH);
-            }
-          } else {
-            for (let i = 0; i < barCount; i++) {
-              const x = i * (barW + gap);
-              ctx.fillStyle = 'rgba(148, 163, 184, 0.16)';
-              ctx.fillRect(x, h - 7, barW, 3);
-            }
-          }
-
-          // Draw Mic Waveform Overlay during measurement (Cyan)
-          const activeMicAnalyser = state.simMode ? simTvAnalyser : micAnalyser;
-          if (state.isMeasuring && activeMicAnalyser) {
-            activeMicAnalyser.getByteTimeDomainData(micFreqData);
-            ctx.strokeStyle = '#38bdf8';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            for (let i = 0; i < micFreqData.length; i++) {
-              const x = (i / (micFreqData.length - 1)) * w;
-              const y = ((micFreqData[i] - 128) / 128) * (h * 0.42) + h * 0.5;
-              if (i === 0) ctx.moveTo(x, y);
-              else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-          }
-        }
-
-        if (vizRafId) cancelAnimationFrame(vizRafId);
-        draw();
-      }
-
-      // Presets Rendering
-      function renderPresets() {
-        el.presetsList.innerHTML = '';
-        state.presets.forEach((p) => {
-          const chip = document.createElement('div');
-          chip.className = 'preset-chip' + (p.url === state.streamUrl ? ' active' : '');
-
-          const label = document.createElement('span');
-          label.textContent = p.name;
-          label.addEventListener('click', () => {
-            state.streamUrl = p.url;
-            state.channelName = p.name;
-            el.channelNameInput.value = p.name;
-            el.streamUrlInput.value = p.url;
-            el.channelNameDisplay.textContent = p.name;
-            persistState();
-            renderPresets();
-            if (state.isPlaying && !state.simMode) {
-              startPlayback();
-            }
-            showToast(`تم اختيار: ${p.name}`);
-          });
-          chip.appendChild(label);
-
-          if (p.id !== DEFAULT_STREAM.id) {
-            const del = document.createElement('button');
-            del.type = 'button';
-            del.className = 'preset-del';
-            del.setAttribute('aria-label', 'حذف القناة');
-            del.textContent = '×';
-            del.addEventListener('click', (e) => {
-              e.stopPropagation();
-              state.presets = state.presets.filter((item) => item.id !== p.id);
-              persistState();
-              renderPresets();
-              showToast('تم حذف القناة');
-            });
-            chip.appendChild(del);
-          }
-
-          el.presetsList.appendChild(chip);
-        });
-      }
-
-      // Wake Lock (Keep Android screen awake)
-      async function toggleWakeLock() {
-        if (!('wakeLock' in navigator)) {
-          showToast('ميزة إبقاء الشاشة مضاءة غير مدعومة في هذا المتصفح');
-          return;
-        }
-        try {
-          if (!state.wakeLockActive) {
-            wakeLockSentinel = await navigator.wakeLock.request('screen');
-            state.wakeLockActive = true;
-            el.wakeLockBtn.classList.add('active');
-            wakeLockSentinel.addEventListener('release', () => {
-              state.wakeLockActive = false;
-              el.wakeLockBtn.classList.remove('active');
-            });
-            showToast('تم تفعيل إبقاء الشاشة مضاءة');
-          } else {
-            if (wakeLockSentinel) await wakeLockSentinel.release();
-            state.wakeLockActive = false;
-            el.wakeLockBtn.classList.remove('active');
-            showToast('تم إيقاف قفل الشاشة');
-          }
-        } catch (err) {
-          showToast('تعذر تفعيل قفل الشاشة حالياً');
-        }
-      }
-
-      function toggleSimulationMode(forceOn = null) {
-        const nextVal = forceOn !== null ? forceOn : !state.simMode;
-        if (state.isMeasuring) stopMeasurement(true);
-
-        state.simMode = nextVal;
-        el.simToggleBtn.classList.toggle('sim-active', state.simMode);
-        el.simToggleBtn.querySelector('span').textContent = state.simMode ? 'محاكاة ✓' : 'محاكاة';
-
-        if (state.simMode) {
-          // Pick a realistic satellite offset for testing (7.5s default)
-          state.simTrueOffset = 7.5;
-          el.channelNameDisplay.textContent = 'بث تجريبي (محاكاة ملعب + معلق)';
-          hideNotice();
-          if (state.isPlaying) {
-            startPlayback();
-          } else {
-            showToast('تم تفعيل وضع المحاكاة — اضغط تشغيل ثم فحص التأخير');
-          }
-        } else {
-          stopSimulationAudio();
-          el.channelNameDisplay.textContent = state.channelName;
-          if (state.isPlaying) {
-            startPlayback();
-          } else {
-            showToast('تم الرجوع لوضع البث الحقيقي');
-          }
-        }
-      }
-
-      // Bind All Events
-      function bindEvents() {
-        el.playPauseBtn.addEventListener('click', () => {
-          if (state.isPlaying) stopPlayback();
-          else startPlayback();
-        });
-
-        el.muteBtn.addEventListener('click', () => {
-          state.isMuted = !state.isMuted;
-          updateVolumeUI();
-        });
-
-        el.volumeSlider.addEventListener('input', (e) => {
-          state.volume = Number(e.target.value) / 100;
-          if (state.volume > 0 && state.isMuted) state.isMuted = false;
-          updateVolumeUI();
-          persistState();
-        });
-
-        el.delaySlider.addEventListener('input', (e) => {
-          setDelay(Number(e.target.value), 'manual');
-        });
-
-        el.resetDelayBtn.addEventListener('click', () => {
-          setDelay(0, 'manual');
-          showToast('تم إرجاع الصوت للبث المباشر (0.00 ث)');
-        });
-
-        document.querySelectorAll('.nudge-btn').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            const delta = Number(btn.getAttribute('data-delta'));
-            setDelay(state.currentDelay + delta, 'manual');
-          });
-        });
-
-        document.querySelectorAll('.seg-btn[data-dur]').forEach((btn) => {
-          btn.addEventListener('click', () => {
-            if (state.isMeasuring) return;
-            const dur = Number(btn.getAttribute('data-dur'));
-            state.measureDurationSec = dur;
-            document.querySelectorAll('.seg-btn[data-dur]').forEach((b) => {
-              b.classList.toggle('active', Number(b.getAttribute('data-dur')) === dur);
-            });
-            persistState();
-          });
-        });
-
-        // Step 1: Measure Delay
-        el.measureBtn.addEventListener('click', () => {
-          if (state.isMeasuring) {
-            stopMeasurement(true);
-          } else {
-            startMeasurement();
-          }
-        });
-
-        // Step 2: Optional Sync Now
-        el.syncNowBtn.addEventListener('click', () => {
-          if (state.detectedTvDelay === null) return;
-          setDelay(state.detectedTvDelay, 'sync');
-          el.resultNoteText.textContent = `تم تطبيق التأخير (${formatSec(state.detectedTvDelay, 2)} ث) بسلاسة. يمكنك الضبط الدقيق بالأذن إذا لزم الأمر.`;
-          showToast(`تمت المزامنة عند ${formatSec(state.detectedTvDelay, 2)} ثانية`);
-        });
-
-        // Accordion Toggle
-        el.settingsToggle.addEventListener('click', () => {
-          const isOpen = el.settingsBody.classList.toggle('open');
-          el.settingsToggle.setAttribute('aria-expanded', String(isOpen));
-        });
-
-        el.applyStreamBtn.addEventListener('click', () => {
-          const url = el.streamUrlInput.value.trim();
-          const name = el.channelNameInput.value.trim() || 'قناة راديو مخصصة';
-          if (!url) {
-            showToast('أدخل رابط بث صالح أولاً');
-            return;
-          }
-          state.streamUrl = url;
-          state.channelName = name;
-          if (!state.simMode) {
-            el.channelNameDisplay.textContent = name;
-          }
-          persistState();
-          renderPresets();
-          if (state.isPlaying && !state.simMode) {
-            startPlayback();
-          }
-          showToast('تم تحديث رابط البث');
-        });
-
-        el.savePresetBtn.addEventListener('click', () => {
-          const url = el.streamUrlInput.value.trim();
-          const name = el.channelNameInput.value.trim() || 'قناة مخصصة';
-          if (!url) {
-            showToast('أدخل رابط بث صالح أولاً');
-            return;
-          }
-          const existing = state.presets.find((p) => p.url === url);
-          if (existing) {
-            existing.name = name;
-          } else {
-            state.presets.push({ id: 'p-' + Date.now(), name, url });
-          }
-          state.streamUrl = url;
-          state.channelName = name;
-          if (!state.simMode) el.channelNameDisplay.textContent = name;
-          persistState();
-          renderPresets();
-          showToast('تم حفظ القناة في القائمة السريعة');
-        });
-
-        el.simToggleBtn.addEventListener('click', () => toggleSimulationMode());
-        el.wakeLockBtn.addEventListener('click', toggleWakeLock);
-
-        el.noticeTrySimBtn.addEventListener('click', () => {
-          toggleSimulationMode(true);
-          startPlayback();
-        });
-
-        el.noticeDismissBtn.addEventListener('click', hideNotice);
-
-        el.audio.addEventListener('error', () => {
-          if (state.isPlaying && !state.simMode) {
-            state.isPlaying = false;
-            updatePlaybackUI();
-            el.playerStateLabel.textContent = 'خطأ في البث';
-            showNotice('انقطع البث أو تعذر تحميله. تأكد من الاتصال بالإنترنت أو جرّب وضع المحاكاة.');
-          }
-        });
-      }
-
-      // Init
-      function init() {
-        loadSavedState();
-        el.channelNameDisplay.textContent = state.channelName;
-        el.channelNameInput.value = state.channelName;
-        el.streamUrlInput.value = state.streamUrl;
-
-        document.querySelectorAll('.seg-btn[data-dur]').forEach((b) => {
-          b.classList.toggle('active', Number(b.getAttribute('data-dur')) === state.measureDurationSec);
-        });
-
-        updateDelayUI();
-        updateVolumeUI();
-        renderPresets();
-        updateStatusHeader('idle');
-        bindEvents();
-        startVisualizer();
-      }
-
-      window.addEventListener('DOMContentLoaded', init);
-    })();
-  </script>
+      var from = Math.max(ring.length ? ring[0].i : 0, m.start - PRE * sr), pre = (m.start - from) / sr;
+      var str = slice(from, m.start + n);
+      if (rms(micArr) < 1e-5) throw new Error("silentmic");
+      if (rms(str) < 1e-5) throw new Error("silentstream");
+      var r = await analyzeAll(micArr, str, pre);
+      if (!r) throw new Error("short");
+      measured = { D: r.delay, q: r.q, z: r.z, z2: r.z2 }; mode = "measured";
+    } catch (e) {
+      meas = null;
+      err = {
+        secure: "الميكروفون يتطلب فتح الصفحة عبر http://localhost:8000 (شغّل proxy_server.py).",
+        mic: "لا يصل صوت من الميكروفون. اسمح باستخدامه وأعد المحاولة.",
+        silentmic: "الميكروفون صامت. قرّب الهاتف من التلفاز وارفع صوته.",
+        silentstream: "لا يصل صوت البث إلى المحلل (قيود CORS). شغّل proxy_server.py وافتح http://localhost:8000",
+        short: "لا يكفي الصوت للمقارنة. جرّب مدة أطول."
+      }[e && e.message] || ("تعذّر الفحص: " + (e && e.name === "NotAllowedError" ? "رُفض إذن الميكروفون" : (e && e.message ? e.message : e)));
+    } finally {
+      try { if (mic) mic.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+      busy = false; applyGain(); progress(0, "فحص التأخير"); $("mbtn").disabled = false;
+      render(); if (err) status(err, "bad");
+    }
+  }
+
+  /* ---------- الخطوة 2: القرار بيد المستخدم ---------- */
+  $("play").onclick = play;
+  $("mbtn").onclick = measure;
+  $("sync").onclick = function () {
+    if (!measured) return;
+    setDelay(measured.D < -0.05 ? -measured.D : 0);               // الراديو متقدم: يُؤخَّر. التلفاز متقدم: تعليمة للرسيفر فقط
+    mode = "synced"; render();
+  };
+  $("mute").onclick = function () {
+    muted = !muted; $("mute").setAttribute("aria-pressed", String(muted));
+    $("mute").textContent = (muted ? "🔇" : "🔊") + " صوت القناة"; applyGain();
+  };
+  $("stopsync").onclick = function () { setDelay(0); measured = null; mode = "idle"; render(); };
+  $("slider").oninput = function () { setDelay(+this.value); mode = "manual"; render(); };
+  Array.prototype.forEach.call(document.querySelectorAll(".btns button"), function (b) {
+    b.onclick = function () { setDelay(delay + (+b.dataset.d)); mode = "manual"; render(); };
+  });
+
+  fetch("/ping").then(function (r) { return r.text(); }).then(function (t) { proxyOK = t === "ok"; }).catch(function () {}).then(function () {
+    if (!proxyOK) $("hint").textContent = "تنبيه: الصفحة تعمل دون الوسيط المحلي، وقد يمنع المتصفح قراءة صوت البث أو الميكروفون. شغّل proxy_server.py وافتح http://localhost:8000";
+  });
+  setDelay(0); render();
+})();
+</script>
 </body>
 </html>
-```
